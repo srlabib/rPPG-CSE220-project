@@ -171,15 +171,17 @@ def run_rppg(
                 bpm = pipeline.current_bpm
                 is_warming_up = True
 
-                if detection.detected and detection.mean_rgb is not None:
+                if detection.detected and detection.mean_rgbs is not None:
                     # 2. Ingest RGB into rPPG pipeline
-                    filtered_signal, bpm, is_warming_up = pipeline.update(detection.mean_rgb)
+                    filtered_signal, bpm, is_warming_up = pipeline.update(detection.mean_rgbs)
 
                     # 3. Render semi-transparent green overlay on ROIs
-                    display_frame = face_processor.render_roi_overlay(
-                        frame,
-                        detection.mask
-                    )
+                    if detection.masks is not None:
+                        display_frame = face_processor.render_roi_overlay(
+                            frame,
+                            detection.masks,
+                            active_indices=pipeline.active_patch_indices
+                        )
 
                 # 4. Render HUD (BPM readout / status)
                 draw_hud(display_frame, bpm=bpm, is_warming_up=is_warming_up, fps=fps)

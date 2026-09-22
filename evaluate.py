@@ -99,8 +99,8 @@ def run_evaluation(dataset_dir: str, headless: bool = True):
                 current_time_sec = cap.get(cv.CAP_PROP_POS_MSEC) / 1000.0
 
                 detection = face_processor.process_frame(frame)
-                if detection.detected and detection.mean_rgb is not None:
-                    _, bpm, is_warming_up = pipeline.update(detection.mean_rgb)
+                if detection.detected and detection.mean_rgbs is not None:
+                    _, bpm, is_warming_up = pipeline.update(detection.mean_rgbs)
                     
                     if not is_warming_up and bpm is not None and bpm > 0:
                         est_times.append(current_time_sec)
@@ -108,8 +108,12 @@ def run_evaluation(dataset_dir: str, headless: bool = True):
 
                 if not headless:
                     display_frame = frame.copy()
-                    if detection.detected and detection.mask is not None:
-                        display_frame = face_processor.render_roi_overlay(frame, detection.mask)
+                    if detection.detected and detection.masks is not None:
+                        display_frame = face_processor.render_roi_overlay(
+                            frame, 
+                            detection.masks,
+                            active_indices=pipeline.active_patch_indices
+                        )
                     cv.imshow("Evaluation - Face Processing", display_frame)
                     if cv.waitKey(1) & 0xFF == ord('q'):
                         print("[INFO] Evaluation interrupted by user.")

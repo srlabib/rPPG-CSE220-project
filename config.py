@@ -2,13 +2,38 @@
 Configuration constants for rPPG (remote photoplethysmography) processing.
 """
 
-# MediaPipe FaceMesh landmark indices for Region of Interest (ROI) extraction
-FOREHEAD_INDICES = [103, 104, 69, 108, 151, 337, 299, 333, 332, 297, 338, 10, 109, 67]
-LEFT_CHEEK_INDICES = [117, 118, 119, 120, 100, 36, 206, 92, 216, 207, 187, 50]
-RIGHT_CHEEK_INDICES = [349, 348, 347, 346, 280, 425, 427, 436, 322, 391, 423, 266, 329]
+# 12 distinct facial patches for Spatial Sub-region rPPG processing
+PATCH_INDICES = [
+    # --- Forehead (3 patches) ---
+    [103, 104, 69, 108,109,67],         # 0: Left Forehead
+    [108, 151, 337, 338,10,109],                 # 1: Center Forehead
+    [337,299,333,332,297,338],       # 2: Right Forehead
+    [104,105,66,107,108,69],
+    [107,9,336,337,151,108],
+    [336,296,334,333,299,337],
 
-# Backward compatibility alias
+    
+    # --- Left Cheek (3 patches) ---
+    [213, 187, 50, 118, 117, 111, 123, 147],       # 3: Left Upper Cheek (under eye)
+    [213,192,214,212,216,206,205,50,187],        # 4: Left Lower Cheek (near mouth)
+    [206,36,100,120,119,118,50,205],            # 5: Left Outer Cheek (near ear)
+    
+    # --- Right Cheek (3 patches) ---
+    [348, 330, 266,426,425,280,346,347],       # 6: Right Upper Cheek (under eye)
+    [346,280,411,433,376,352,345,372,340],       # 7: Right Lower Cheek (near mouth)
+    [426,436,432,434,416,433,411,280,425],            # 8: Right Outer Cheek (near ear)
+    
+]
+
+# Provide backward compatibility aliases just in case
+FOREHEAD_INDICES = PATCH_INDICES[0] + PATCH_INDICES[1] + PATCH_INDICES[2]
+LEFT_CHEEK_INDICES = PATCH_INDICES[3] + PATCH_INDICES[4] + PATCH_INDICES[5]
+RIGHT_CHEEK_INDICES = PATCH_INDICES[6] + PATCH_INDICES[7] + PATCH_INDICES[8]
 FORHEAD_INDICES = FOREHEAD_INDICES
+
+# Dynamic fusion parameters
+NUM_PATCHES = 12
+TOP_K_PATCHES = 6
 
 # Physiological frequency boundaries (human heart rate limits)
 MIN_FREQ_HZ = 0.7   # ~42 BPM
