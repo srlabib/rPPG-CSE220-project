@@ -1,0 +1,20 @@
+# Ignore the data folder completely
+data/
+
+# Ignore Python cache and environment files
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# Ignore local editor configurations
+.vscode/
+
+# Ignore heavy video/output formats if you generate them
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.npy
+*.npz
