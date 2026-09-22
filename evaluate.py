@@ -36,6 +36,12 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="If set, shows the video processing windows during evaluation."
     )
+    parser.add_argument(
+        "--skip-seconds",
+        type=float,
+        default=15.0,
+        help="Seconds to skip at the beginning before calculating metrics (for stabilization)."
+    )
     return parser.parse_args()
 
 
@@ -63,7 +69,7 @@ def load_ground_truth(file_path: str) -> tuple[np.ndarray, np.ndarray]:
     return gt_times_sec, gt_hr
 
 
-def run_evaluation(dataset_dir: str, headless: bool = True):
+def run_evaluation(dataset_dir: str, headless: bool = True, skip_seconds: float = 15.0):
     video_path = os.path.join(dataset_dir, "vid.avi")
     gt_path = os.path.join(dataset_dir, "gtdump.xmp")
 
@@ -138,33 +144,43 @@ def run_evaluation(dataset_dir: str, headless: bool = True):
 
     print("[INFO] Calculating performance metrics...")
     
-    # We must compare estimated HR against GT HR at the same timestamps.
-    # Since they are sampled differently, we interpolate the Ground Truth HR
-    # to match the timestamps where we have valid estimations.
-    interpolated_gt_hr = np.interp(est_times, gt_times, gt_hr)
+    # Mask out the stabilization period
+    valid_mask = est_times >= skip_seconds
+    if np.any(valid_mask):
+        est_times_stable = est_times[valid_mask]
+        est_hr_stable = est_hr[valid_mask]
+        interpolated_gt_hr = np.interp(est_times_stable, gt_times, gt_hr)
+        
+        absolute_errors = np.abs(est_hr_stable - interpolated_gt_hr)
+        squared_errors = (est_hr_stable - interpolated_gt_hr) ** 2
 
-    # Calculate Metrics
-    absolute_errors = np.abs(est_hr - interpolated_gt_hr)
-    squared_errors = (est_hr - interpolated_gt_hr) ** 2
-
-    mae = np.mean(absolute_errors)
-    rmse = np.sqrt(np.mean(squared_errors))
-
-    print("-" * 40)
-    print("        EVALUATION RESULTS        ")
-    print("-" * 40)
-    print(f"Mean Absolute Error (MAE):  {mae:.2f} BPM")
-    print(f"Root Mean Square Error (RMSE): {rmse:.2f} BPM")
-    print("-" * 40)
+        mae = np.mean(absolute_errors)
+        rmse = np.sqrt(np.mean(squared_errors))
+        
+        print("-" * 40)
+        print("        EVALUATION RESULTS        ")
+        print("-" * 40)
+        print(f"Skipped first {skip_seconds}s for stabilization.")
+        print(f"Mean Absolute Error (MAE):  {mae:.2f} BPM")
+        print(f"Root Mean Square Error (RMSE): {rmse:.2f} BPM")
+        print("-" * 40)
+        plot_title = f"rPPG Performance Evaluation (MAE: {mae:.2f}, RMSE: {rmse:.2f})"
+    else:
+        print(f"\n[WARNING] Video is shorter than {skip_seconds} seconds. Metrics cannot be calculated.")
+        plot_title = "rPPG Performance Evaluation"
 
     # Plotting
     plot_path = os.path.join(dataset_dir, "evaluation_result.png")
     plt.figure(figsize=(10, 5))
+    
+    if skip_seconds > 0:
+        plt.axvspan(0, skip_seconds, color='gray', alpha=0.2, label='Stabilization Period (Skipped)')
+
     plt.plot(gt_times, gt_hr, label="Ground Truth HR", color="blue", linewidth=1.5, alpha=0.7)
     plt.plot(est_times, est_hr, label="Estimated HR (rPPG)", color="red", linewidth=2.0)
     plt.xlabel("Time (seconds)")
     plt.ylabel("Heart Rate (BPM)")
-    plt.title(f"rPPG Performance Evaluation (MAE: {mae:.2f}, RMSE: {rmse:.2f})")
+    plt.title(plot_title)
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
@@ -183,7 +199,11 @@ def run_evaluation(dataset_dir: str, headless: bool = True):
 def main():
     args = parse_arguments()
     try:
-        run_evaluation(dataset_dir=args.dataset, headless=not args.no_headless)
+        run_evaluation(
+            dataset_dir=args.dataset, 
+            headless=not args.no_headless,
+            skip_seconds=args.skip_seconds
+        )
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted by user.")
     except Exception as e:
