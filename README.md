@@ -46,7 +46,18 @@ pip install -r requirements.txt
 
 ## How to Run
 
-### 1. Run with Default Source
+### 1. Run the Web Application (Recommended)
+Launch the modern medical dashboard interface with real-time video streaming, live BVP oscilloscope, and dynamic Ground Truth benchmarking:
+```bash
+python manage.py runserver
+```
+Then navigate to **`http://localhost:8000`** in your browser.
+- **Webcam Mode**: Click "Start Stream" to monitor real-time pulse and BPM with face mesh tracking.
+- **Video & Ground Truth Benchmark Mode**: Upload a video (e.g. `data/subject10/vid.avi`) and optional ground truth (`data/subject10/ground_truth.txt`). The ground truth curve pre-renders automatically, and real-time prediction tracks alongside it while reporting live **MAE**, **RMSE**, and **Pearson $r$**.
+
+---
+
+### 2. Run with Default CLI Source
 By default, the script looks for `data/10-gt/vid.avi` if present, or connects to camera `0`:
 ```bash
 python VideoProcessing.py

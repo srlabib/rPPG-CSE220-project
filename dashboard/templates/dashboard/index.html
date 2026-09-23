@@ -1,0 +1,274 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rPPG VitalSigns Studio - Real-Time Benchmarking Platform</title>
+    
+    <!-- Google Fonts & Chart.js -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header class="navbar">
+        <div class="brand">
+            <div class="brand-icon">💓</div>
+            <div>
+                <h1 class="brand-title">rPPG VitalSigns Studio</h1>
+                <p class="brand-subtitle">Contactless Physiological Monitoring</p>
+            </div>
+        </div>
+
+        <!-- Mode Switcher -->
+        <div class="mode-switch">
+            <button id="tabWebcam" class="mode-tab active">
+                <span>📷</span> Live Webcam
+            </button>
+            <button id="tabUpload" class="mode-tab">
+                <span>📁</span> Video & Ground Truth Benchmark
+            </button>
+        </div>
+
+        <!-- Live Status Badge -->
+        <div class="status-badge">
+            <div id="statusDot" class="status-dot idle"></div>
+            <span id="statusText">System Ready</span>
+        </div>
+    </header>
+
+    <!-- Main Grid: Left Panel (Video & Pulse Oscilloscope) | Right Panel (Vitals, Graph, Metrics) -->
+    <main class="dashboard-container">
+        <!-- Left Column: Video Player & BVP Oscilloscope -->
+        <div class="panel-left">
+            <section class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><span>📹</span> Live Video Stream & FaceMesh</h2>
+                </div>
+
+                <div class="video-viewport">
+                    <img id="videoFeed" class="video-feed" alt="rPPG Video Stream" />
+                    <div id="videoPlaceholder" class="video-placeholder">
+                        <div class="icon">👤</div>
+                        <h3>Camera / Video Offline</h3>
+                        <p>Press <strong>Start Stream</strong> or upload a video to initiate face tracking and rPPG extraction.</p>
+                    </div>
+                </div>
+
+                <!-- Playback Progress Bar -->
+                <div class="video-progress-container">
+                    <div id="videoProgressBar" class="video-progress-bar"></div>
+                </div>
+
+                <!-- Upload Panel (Active in Benchmark Mode) -->
+                <div id="uploadPanel" class="upload-panel">
+                    <!-- Instant Local Dataset Selector (Zero Upload) -->
+                    <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem 0.85rem; margin-bottom: 0.75rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                            <label for="localDatasetSelect" style="font-size: 0.78rem; font-weight: 700; color: var(--accent-cyan); display: flex; align-items: center; gap: 5px;">
+                                <span>⚡</span> Auto-Detected Datasets in /data (0s Load, No Upload)
+                            </label>
+                            <button type="button" id="btnRefreshDatasets" title="Rescan data/ folder" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.75rem; text-decoration: underline;">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <select id="localDatasetSelect" style="flex: 1; background: var(--bg-surface-elevated); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.45rem 0.6rem; font-size: 0.8rem; cursor: pointer;">
+                                <option value="">Scanning data/ folder...</option>
+                            </select>
+                            <button type="button" id="btnLoadSelectedDataset" class="btn btn-primary" style="font-size: 0.8rem; padding: 0.45rem 0.85rem; white-space: nowrap;">
+                                ⚡ Load
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div style="display: flex; align-items: center; margin: 0.5rem 0; color: var(--text-muted); font-size: 0.7rem; font-weight: 600;">
+                        <span style="flex: 1; height: 1px; background: var(--border-color);"></span>
+                        <span style="padding: 0 0.5rem; text-transform: uppercase;">or upload external files from PC</span>
+                        <span style="flex: 1; height: 1px; background: var(--border-color);"></span>
+                    </div>
+
+                    <div class="upload-grid">
+                        <div class="upload-box">
+                            <label for="videoFileInput">
+                                <span>🎥</span>
+                                <strong>Select Video</strong>
+                                <div class="file-name-preview" id="videoFilePreview">No file selected (.avi, .mp4)</div>
+                            </label>
+                            <input type="file" id="videoFileInput" accept=".mp4,.avi,.mov" />
+                        </div>
+
+                        <div class="upload-box">
+                            <label for="gtFileInput">
+                                <span>📈</span>
+                                <strong>Select Ground Truth</strong>
+                                <div class="file-name-preview" id="gtFilePreview">Optional (.csv, .txt)</div>
+                            </label>
+                            <input type="file" id="gtFileInput" accept=".csv,.txt" />
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; justify-content: space-between; align-items: center; margin-top: 0.75rem; flex-wrap: wrap;">
+                        <button type="button" id="formatInfoBtn" class="format-info-btn">
+                            ℹ️ Ground Truth Data Format Guide
+                        </button>
+                        <button type="button" id="btnSubmitUpload" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.5rem 0.85rem;">
+                            Upload & Pre-load Curve
+                        </button>
+                    </div>
+                    <div id="uploadStatus" style="font-size: 0.8rem; color: var(--accent-cyan); margin-top: 0.5rem;"></div>
+                </div>
+
+                <!-- Controls -->
+                <div class="controls-row">
+                    <button id="btnStart" class="btn btn-primary">
+                        <span>▶</span> Start Stream
+                    </button>
+                    <button id="btnPause" class="btn btn-secondary" style="display: none;">
+                        <span>⏸</span> Pause
+                    </button>
+                    <button id="btnStop" class="btn btn-danger" style="display: none;">
+                        <span>⏹</span> Stop
+                    </button>
+                </div>
+            </section>
+
+            <!-- Blood Volume Pulse (BVP Waveform) Oscilloscope -->
+            <section class="card" style="margin-top: 1.25rem;">
+                <div class="card-header">
+                    <h3 class="card-title"><span>🌊</span> Blood Volume Pulse (BVP Waveform)</h3>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">60 FPS Oscilloscope</span>
+                </div>
+                <div class="oscilloscope-container">
+                    <canvas id="pulseCanvas"></canvas>
+                </div>
+            </section>
+        </div>
+
+        <!-- Right Column: Vitals (Top) -> BPM vs Time Graph (Middle) -> Benchmark Metrics (Bottom) -->
+        <div class="panel-right">
+            <!-- Vitals Hero (Heart Rate + SNR) on Top -->
+            <div class="hero-vitals-grid">
+                <div class="vital-card primary">
+                    <div class="vital-label">
+                        <span>Heart Rate (rPPG POS)</span>
+                        <span id="heartIcon" class="heart-icon">❤️</span>
+                    </div>
+                    <div class="vital-value-row">
+                        <span id="bpmValue" class="vital-value">--</span>
+                        <span class="vital-unit">BPM</span>
+                    </div>
+                </div>
+
+                <div class="vital-card">
+                    <div class="vital-label">
+                        <span>Signal Quality Index (SQI)</span>
+                        <span>📶</span>
+                    </div>
+                    <div class="vital-value-row">
+                        <span id="sqiValue" class="vital-value" style="color: var(--accent-cyan);">--</span>
+                        <span class="vital-unit">SNR</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heart Rate (BPM) vs. Time Graph Card in the middle (large, tall & sharp) -->
+            <section class="card" style="margin-top: 1.25rem;">
+                <div class="card-header">
+                    <h3 class="card-title"><span>📈</span> Heart Rate (BPM) vs. Time</h3>
+                    <div style="display: flex; gap: 1rem; font-size: 0.8rem; font-weight: 600;">
+                        <span id="gtLegendBadge" style="color: #38bdf8; display: none; align-items: center; gap: 6px;">
+                            <span style="display: inline-block; width: 14px; height: 2px; background: #38bdf8; border-radius: 1px;"></span> Ground Truth
+                        </span>
+                        <span style="color: #10b981; display: flex; align-items: center; gap: 6px;">
+                            <span style="display: inline-block; width: 14px; height: 2px; background: #10b981; border-radius: 1px;"></span> Predicted rPPG
+                        </span>
+                    </div>
+                </div>
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="bpmChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Ground Truth Live Performance Metrics below the Graph -->
+            <section class="card" style="margin-top: 1.25rem;">
+                <div class="card-header" style="margin-bottom: 0.5rem;">
+                    <h3 class="card-title" style="font-size: 0.875rem; color: var(--text-secondary);">
+                        <span>⚖️</span> Live Ground-Truth Benchmark Metrics
+                    </h3>
+                </div>
+
+                <div class="benchmark-metrics-grid">
+                    <div class="metric-pill">
+                        <div class="metric-pill-title">Reference GT</div>
+                        <div id="metricGtBpm" class="metric-pill-value cyan">--</div>
+                    </div>
+                    <div class="metric-pill">
+                        <div class="metric-pill-title">Instant Error</div>
+                        <div id="metricError" class="metric-pill-value amber">--</div>
+                    </div>
+                    <div class="metric-pill">
+                        <div class="metric-pill-title">MAE (BPM)</div>
+                        <div id="metricMae" class="metric-pill-value emerald">--</div>
+                    </div>
+                    <div class="metric-pill">
+                        <div class="metric-pill-title">RMSE (BPM)</div>
+                        <div id="metricRmse" class="metric-pill-value emerald">--</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface-elevated); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Pearson Correlation Coefficient (r):</span>
+                    <span id="metricPearson" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan);">--</span>
+                </div>
+                <div style="margin-top: 0.4rem; text-align: right; font-size: 0.72rem; color: var(--text-muted);">
+                    * Cumulative metrics calculated after 15.0s stabilization window (matches evaluate.py)
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Ground Truth Format Guide Modal -->
+    <div id="formatModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="font-size: 1.1rem; font-weight: 700;">Ground Truth Data Format Guide</h3>
+                <button id="modalClose" class="modal-close">&times;</button>
+            </div>
+
+            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                The platform supports two ground truth formats for evaluation:
+            </p>
+
+            <h4 style="font-size: 0.9rem; color: var(--accent-cyan);">Option 1: Standard CSV (Recommended)</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">A comma-separated file with <code>timestamp</code> (seconds) and <code>hr</code> (BPM):</p>
+            <div class="format-code-block">timestamp,hr
+0.0,72.4
+0.5,72.8
+1.0,73.1
+1.5,73.5
+2.0,73.9</div>
+
+            <h4 style="font-size: 0.9rem; color: var(--accent-cyan); margin-top: 1rem;">Option 2: UBFC Dataset Format (.txt)</h4>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">The 3-line format used in standard UBFC-rPPG datasets (e.g. <code>subject10/ground_truth.txt</code>):</p>
+            <div class="format-code-block">Line 1: 0.12 0.15 0.18 ... (PPG signal)
+Line 2: 72.5 72.8 73.1 ... (Heart rate BPM)
+Line 3: 0.033 0.066 0.099 ... (Timesteps in seconds)</div>
+
+            <p style="font-size: 0.8rem; color: var(--accent-emerald); margin-top: 0.5rem;">
+                ✅ The system automatically detects either format upon upload.
+            </p>
+        </div>
+    </div>
+
+    <!-- JavaScript Controller -->
+    <script src="{% static 'js/dashboard.js' %}"></script>
+</body>
+</html>
