@@ -15,7 +15,8 @@ rPPG/
 ├── face_processor.py     # MediaPipe FaceMesh wrapper & skin ROI extractor (forehead & cheeks)
 ├── visualizer.py         # Pulse wave oscilloscope plot and HUD overlay renderer
 ├── rppg_pipeline.py      # Core stateful pipeline managing buffers and heart rate estimation
-└── VideoProcessing.py    # Main CLI application entry point and video loop orchestrator
+├── VideoProcessing.py    # Main CLI application entry point and video loop orchestrator
+└── requirements.txt      # Project dependencies and pinned versions
 ```
 
 ### Module Responsibilities
@@ -30,6 +31,16 @@ rPPG/
 | **`VideoProcessing.py`** | Application runner with CLI argument parsing, webcam/video file abstraction, keyboard control (`q`/`ESC`), and guaranteed cleanup via `try...finally`. |
 | **`evaluate.py`** | Offline benchmark script for dataset folders with `.xmp` ground truth files (e.g., `data/10-gt`). |
 | **`evaluate_subject.py`** | Offline benchmark script for UBFC-style datasets (e.g., `data/subject10`) with multi-line `ground_truth.txt` (PPG, HR, Timestep). Generates MAE, RMSE, Pearson $r$, Bias, and high-res comparison plots. |
+
+---
+
+## Installation
+
+Install the required dependencies using `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
