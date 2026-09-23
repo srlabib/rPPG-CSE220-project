@@ -8,6 +8,8 @@ from facial video feeds using MediaPipe FaceMesh and the POS algorithm.
 import argparse
 import os
 import sys
+import time
+from typing import Optional
 import cv2 as cv
 import numpy as np
 
@@ -19,6 +21,8 @@ from config import (
     FORHEAD_INDICES,  # Typo alias preserved for backward compatibility
     DEFAULT_FRAME_WIDTH,
     DEFAULT_FRAME_HEIGHT,
+    DEFAULT_CAM_WIDTH,
+    DEFAULT_CAM_HEIGHT,
     DEFAULT_FPS,
 )
 from signal_processing import (
@@ -33,8 +37,8 @@ from rppg_pipeline import RPPGPipeline
 
 def open_video_source(
     source: str,
-    width: int = DEFAULT_FRAME_WIDTH,
-    height: int = DEFAULT_FRAME_HEIGHT,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
     target_fps: float = DEFAULT_FPS,
     show_camera_settings: bool = False,
 ) -> cv.VideoCapture:
@@ -43,8 +47,8 @@ def open_video_source(
 
     Args:
         source: Camera index as string/int (e.g., '0', '1') or path to video file.
-        width: Desired capture width (for webcams).
-        height: Desired capture height (for webcams).
+        width: Desired capture width (for webcams). Defaults to 640 for webcams.
+        height: Desired capture height (for webcams). Defaults to 480 for webcams.
         target_fps: Desired capture frame rate.
         show_camera_settings: If True, opens Windows hardware camera settings dialog.
 
@@ -54,7 +58,14 @@ def open_video_source(
     is_camera = source.isdigit()
     device_id = int(source) if is_camera else source
 
-    cap = cv.VideoCapture(device_id)
+    if is_camera and sys.platform == "win32":
+        cap = cv.VideoCapture(device_id, cv.CAP_DSHOW)
+        if not cap.isOpened() or not cap.read()[0]:
+            cap.release()
+            cap = cv.VideoCapture(device_id)
+    else:
+        cap = cv.VideoCapture(device_id)
+
     if not cap.isOpened():
         raise RuntimeError(
             f"Cannot open video source: '{source}'. "
@@ -62,10 +73,13 @@ def open_video_source(
         )
 
     if is_camera:
-        # Request uncompressed raw frames (YUYV) instead of compressed MJPEG for DroidCam/webcams
-        cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'YUYV'))
-        cap.set(cv.CAP_PROP_FRAME_WIDTH, width)
-        cap.set(cv.CAP_PROP_FRAME_HEIGHT, height)
+        actual_w = width if width is not None else DEFAULT_CAM_WIDTH
+        actual_h = height if height is not None else DEFAULT_CAM_HEIGHT
+
+        # Request MJPG stream for maximum USB camera throughput and high FPS
+        cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
+        cap.set(cv.CAP_PROP_FRAME_WIDTH, actual_w)
+        cap.set(cv.CAP_PROP_FRAME_HEIGHT, actual_h)
         cap.set(cv.CAP_PROP_FPS, target_fps)
 
         if show_camera_settings:
@@ -93,14 +107,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--width",
         type=int,
-        default=DEFAULT_FRAME_WIDTH,
-        help=f"Camera frame width (default: {DEFAULT_FRAME_WIDTH}).",
+        default=None,
+        help=f"Camera frame width (default: {DEFAULT_CAM_WIDTH} for webcams, {DEFAULT_FRAME_WIDTH} for files).",
     )
     parser.add_argument(
         "--height",
         type=int,
-        default=DEFAULT_FRAME_HEIGHT,
-        help=f"Camera frame height (default: {DEFAULT_FRAME_HEIGHT}).",
+        default=None,
+        help=f"Camera frame height (default: {DEFAULT_CAM_HEIGHT} for webcams, {DEFAULT_FRAME_HEIGHT} for files).",
     )
     parser.add_argument(
         "--fps",
@@ -124,15 +138,17 @@ def parse_arguments() -> argparse.Namespace:
 
 def run_rppg(
     source: str,
-    width: int = DEFAULT_FRAME_WIDTH,
-    height: int = DEFAULT_FRAME_HEIGHT,
-    fps_override: float = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    fps_override: Optional[float] = None,
     show_camera_settings: bool = False,
     show_graph: bool = True,
 ):
     """
     Main processing loop for rPPG tracking and visualization.
     """
+    is_camera = source.isdigit()
+
     cap = open_video_source(
         source=source,
         width=width,
@@ -146,22 +162,45 @@ def run_rppg(
     fps = fps_override if fps_override and fps_override > 0 else (
         detected_fps if detected_fps > 0 else DEFAULT_FPS
     )
-    delay = max(int(1000.0 / fps), 1)
+    # For live camera, waitKey(1) avoids adding artificial 33ms sleep latency
+    delay = 1 if is_camera else max(int(1000.0 / fps), 1)
 
-    print(f"[INFO] Video source: {source}")
+    print(f"[INFO] Video source: {source} ({'Webcam' if is_camera else 'File'})")
     print(f"[INFO] Resolution: {cap.get(cv.CAP_PROP_FRAME_WIDTH):.0f}x{cap.get(cv.CAP_PROP_FRAME_HEIGHT):.0f}")
-    print(f"[INFO] Frame rate: {fps:.2f} FPS (Frame delay: {delay} ms)")
+    print(f"[INFO] Initial frame rate estimate: {fps:.2f} FPS (Key wait: {delay} ms)")
+    if is_camera and not fps_override:
+        print("[INFO] Dynamic real-time FPS estimation enabled for webcam.")
     print("[INFO] Press 'q' or ESC in any display window to exit.")
 
     pipeline = RPPGPipeline(fps=fps)
+    measured_fps = fps
+    last_frame_time = time.perf_counter()
+    face_lost_count = 0
 
     try:
         with FaceROIProcessor() as face_processor:
             while True:
+                frame_start_time = time.perf_counter()
                 ret, frame = cap.read()
                 if not ret:
                     print("[INFO] End of video stream or cannot read frame. Exiting...")
                     break
+
+                # Downscale large frames so display and processing are fast and fit screen
+                frame = FaceROIProcessor._maybe_resize(frame)
+
+                # Dynamic FPS measurement based on actual wall-clock inter-frame arrival time
+                now = time.perf_counter()
+                dt = now - last_frame_time
+                last_frame_time = now
+                if dt > 0:
+                    instant_fps = 1.0 / dt
+                    measured_fps = 0.9 * measured_fps + 0.1 * instant_fps
+                    if is_camera and not fps_override:
+                        pipeline.set_fps(measured_fps)
+
+                current_fps = measured_fps if is_camera else fps
+                reset_threshold = int(2.5 * current_fps)
 
                 # 1. Detect face landmarks and extract skin ROI
                 detection = face_processor.process_frame(frame)
@@ -172,19 +211,28 @@ def run_rppg(
                 is_warming_up = True
 
                 if detection.detected and detection.mean_rgbs is not None:
+                    # If returning after prolonged absence (> 2.5s), reset pipeline to prevent step discontinuity
+                    if face_lost_count >= reset_threshold:
+                        pipeline.reset()
+                    face_lost_count = 0
+
                     # 2. Ingest RGB into rPPG pipeline
                     filtered_signal, bpm, is_warming_up = pipeline.update(detection.mean_rgbs)
 
-                    # 3. Render semi-transparent green overlay on ROIs
-                    if detection.masks is not None:
-                        display_frame = face_processor.render_roi_overlay(
-                            frame,
-                            detection.masks,
-                            active_indices=pipeline.active_patch_indices
-                        )
+                    # 3. Render semi-transparent green overlay on active ROIs
+                    display_frame = face_processor.render_roi_overlay(
+                        frame,
+                        active_indices=pipeline.active_patch_indices,
+                        polys=detection.polys
+                    )
+                else:
+                    face_lost_count += 1
+                    # Brief loss (< 2.5s): hold previous stable BPM estimate
+                    if face_lost_count < reset_threshold and len(pipeline.pulse_buffer) >= pipeline.min_samples_for_bpm:
+                        is_warming_up = False
 
-                # 4. Render HUD (BPM readout / status)
-                draw_hud(display_frame, bpm=bpm, is_warming_up=is_warming_up, fps=fps)
+                # 4. Render HUD (BPM readout / status and live FPS)
+                draw_hud(display_frame, bpm=bpm, is_warming_up=is_warming_up, fps=current_fps)
 
                 # 5. Display windows
                 cv.imshow("Face mask", display_frame)
@@ -193,8 +241,14 @@ def run_rppg(
                     graph_image = create_pulse_graph(filtered_signal)
                     cv.imshow("Master pulse signal", graph_image)
 
+                # Real-time frame synchronization: wait only the remaining time for target FPS
+                elapsed = time.perf_counter() - frame_start_time
+                target_frame_sec = 1.0 / fps
+                remaining_ms = int((target_frame_sec - elapsed) * 1000)
+                frame_delay = 1 if is_camera else max(1, remaining_ms)
+
                 # Keyboard interaction
-                key = cv.waitKey(delay) & 0xFF
+                key = cv.waitKey(frame_delay) & 0xFF
                 if key in (ord('q'), 27):  # 'q' or ESC
                     break
 
@@ -202,6 +256,7 @@ def run_rppg(
         cap.release()
         cv.destroyAllWindows()
         print("[INFO] Cleanup complete. Resources released.")
+
 
 
 def main():

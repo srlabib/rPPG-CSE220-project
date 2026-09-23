@@ -101,6 +101,9 @@ def run_evaluation(dataset_dir: str, headless: bool = True, skip_seconds: float 
                 if not ret:
                     break
 
+                # Downscale large frames for faster processing
+                frame = FaceROIProcessor._maybe_resize(frame)
+
                 # Get current timestamp from OpenCV in seconds
                 current_time_sec = cap.get(cv.CAP_PROP_POS_MSEC) / 1000.0
 
@@ -114,11 +117,11 @@ def run_evaluation(dataset_dir: str, headless: bool = True, skip_seconds: float 
 
                 if not headless:
                     display_frame = frame.copy()
-                    if detection.detected and detection.masks is not None:
+                    if detection.detected and detection.polys is not None:
                         display_frame = face_processor.render_roi_overlay(
-                            frame, 
-                            detection.masks,
-                            active_indices=pipeline.active_patch_indices
+                            frame,
+                            active_indices=pipeline.active_patch_indices,
+                            polys=detection.polys
                         )
                     cv.imshow("Evaluation - Face Processing", display_frame)
                     if cv.waitKey(1) & 0xFF == ord('q'):

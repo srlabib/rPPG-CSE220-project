@@ -4,13 +4,14 @@ Signal processing algorithms for rPPG pulse extraction and heart rate estimation
 
 from typing import Union, Sequence
 import numpy as np
-from scipy.signal import butter, filtfilt, welch
+from scipy.signal import butter, filtfilt, detrend, find_peaks
 
 from config import (
     MIN_FREQ_HZ,
     MAX_FREQ_HZ,
     FILTER_ORDER,
-    POS_EPSILON
+    POS_EPSILON,
+    FFT_NFFT
 )
 
 
@@ -58,6 +59,41 @@ def execute_pos_algorithm(
     h_centered = h - np.mean(h)
 
     return h_centered
+
+
+def execute_pos_algorithm_batch(
+    temporal_tensor: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """
+    Executes the Plane-Orthogonal-to-Skin (POS) algorithm across multiple patches simultaneously.
+
+    Args:
+        temporal_tensor: 3D array of shape (K, 3, N) -> K patches, 3 channels (R,G,B), N frames.
+        eps: Numerical stability constant.
+
+    Returns:
+        h_centered: 2D array of shape (K, N) of extracted, mean-centered pulse signals.
+    """
+    r = temporal_tensor[:, 0, :]
+    g = temporal_tensor[:, 1, :]
+    b = temporal_tensor[:, 2, :]
+
+    r_n = r / (np.mean(r, axis=1, keepdims=True) + eps)
+    g_n = g / (np.mean(g, axis=1, keepdims=True) + eps)
+    b_n = b / (np.mean(b, axis=1, keepdims=True) + eps)
+
+    s1 = g_n - b_n
+    s2 = -2.0 * r_n + g_n + b_n
+
+    sigma_s1 = np.std(s1, axis=1, keepdims=True)
+    sigma_s2 = np.std(s2, axis=1, keepdims=True)
+    alpha = sigma_s1 / (sigma_s2 + eps)
+
+    h = s1 + alpha * s2
+    h_centered = h - np.mean(h, axis=1, keepdims=True)
+    return h_centered
+
 
 
 def butter_bandpass_filter(
@@ -111,86 +147,144 @@ def calculate_bpm(
     filtered_signal: Union[np.ndarray, Sequence[float]],
     fps: float,
     min_freq: float = MIN_FREQ_HZ,
-    max_freq: float = MAX_FREQ_HZ
+    max_freq: float = MAX_FREQ_HZ,
+    nfft: int = FFT_NFFT
 ) -> float:
     """
-    Calculates the heart rate (BPM) from a filtered rPPG signal using Welch's method.
-
-    Args:
-        filtered_signal: 1D filtered rPPG signal.
-        fps: Video frame rate.
-        min_freq: Minimum physiological heart rate frequency in Hz (default 0.7 Hz).
-        max_freq: Maximum physiological heart rate frequency in Hz (default 3.0 Hz).
-
-    Returns:
-        Heart rate in beats per minute (BPM), or 0.0 if not detectable.
+    Calculates the heart rate (BPM) from a filtered rPPG signal using zero-padded FFT.
+    Applies linear detrending, Hann windowing, zero-padding, and peak picking.
     """
     sig = np.asarray(filtered_signal, dtype=np.float32)
-    if len(sig) == 0 or fps <= 0:
+    n = len(sig)
+    if n == 0 or fps <= 0:
         return 0.0
 
-    # Power Spectral Density (PSD) via Welch's periodogram
-    freqs, psd = welch(sig, fs=fps, nperseg=len(sig))
+    # 1. Fast linear detrending
+    t = np.arange(n, dtype=np.float32)
+    t_centered = t - 0.5 * (n - 1)
+    denom = np.sum(t_centered ** 2) + 1e-8
+    sig_mean = np.mean(sig)
+    sig_centered = sig - sig_mean
+    slope = np.sum(sig_centered * t_centered) / denom
+    sig_clean = sig_centered - slope * t_centered
 
-    # Restrict search to valid heart rate frequencies
-    valid_indices = np.where((freqs >= min_freq) & (freqs <= max_freq))[0]
-    if len(valid_indices) == 0:
+    # 2. Windowed FFT
+    window = np.hanning(n).astype(np.float32)
+    actual_nfft = max(nfft, n)
+    freqs = np.fft.rfftfreq(actual_nfft, d=1.0 / fps)
+    fft_vals = np.fft.rfft(sig_clean * window, n=actual_nfft)
+    psd = np.abs(fft_vals) ** 2
+
+    # 3. Search restricted to valid heart rate frequencies
+    valid_mask = (freqs >= min_freq) & (freqs <= max_freq)
+    if not np.any(valid_mask):
         return 0.0
 
-    valid_freqs = freqs[valid_indices]
-    valid_psd = psd[valid_indices]
+    valid_freqs = freqs[valid_mask]
+    valid_psd = psd[valid_mask]
 
-    # Dominant frequency has highest power
-    peak_idx = np.argmax(valid_psd)
-    heart_rate_hz = float(valid_freqs[peak_idx])
+    # 4. Find dominant peak
+    peaks, _ = find_peaks(valid_psd)
+    if len(peaks) > 0:
+        best_peak = peaks[np.argmax(valid_psd[peaks])]
+        heart_rate_hz = float(valid_freqs[best_peak])
+        peak_power = float(valid_psd[best_peak])
+    else:
+        peak_idx = np.argmax(valid_psd)
+        heart_rate_hz = float(valid_freqs[peak_idx])
+        peak_power = float(valid_psd[peak_idx])
 
-    # Convert Hz to BPM
-    bpm = heart_rate_hz * 60.0
-    return bpm
+    # 5. Sub-harmonic verification (prevents 2x harmonic doubling, e.g. 68 BPM -> 136-140 BPM)
+    # If dominant peak is high (>= 1.6 Hz / 96 BPM), check if true fundamental exists at f/2
+    if heart_rate_hz >= 1.6:
+        sub_freq = heart_rate_hz / 2.0
+        if sub_freq >= min_freq:
+            sub_mask = np.abs(valid_freqs - sub_freq) <= 0.15
+            if np.any(sub_mask):
+                sub_max_psd = float(np.max(valid_psd[sub_mask]))
+                # If significant spectral power exists at f/2 (>= 35% of the harmonic peak),
+                # the lower frequency is the true physiological fundamental heart rate
+                if sub_max_psd >= 0.35 * peak_power:
+                    sub_idx = np.where(sub_mask)[0][np.argmax(valid_psd[sub_mask])]
+                    heart_rate_hz = float(valid_freqs[sub_idx])
+
+    return heart_rate_hz * 60.0
+
+
+def calculate_snr_batch(
+    pulses: np.ndarray,
+    fps: float,
+    min_freq: float = MIN_FREQ_HZ,
+    max_freq: float = MAX_FREQ_HZ,
+    nfft: int = FFT_NFFT
+) -> np.ndarray:
+    """
+    Computes SNR across multiple pulse waves (shape: K patches x N frames)
+    simultaneously in a single vectorized FFT operation.
+    """
+    k, n = pulses.shape
+    if n == 0 or fps <= 0:
+        return np.zeros(k, dtype=np.float32)
+
+    # 1. Vectorized linear detrend
+    t = np.arange(n, dtype=np.float32)
+    t_centered = t - 0.5 * (n - 1)
+    denom = np.sum(t_centered ** 2) + 1e-8
+
+    p_mean = np.mean(pulses, axis=1, keepdims=True)
+    p_centered = pulses - p_mean
+    slopes = np.sum(p_centered * t_centered, axis=1, keepdims=True) / denom
+    clean = p_centered - slopes * t_centered
+
+    # 2. Windowed FFT across all patches at once
+    window = np.hanning(n).astype(np.float32)
+    windowed = clean * window[None, :]
+
+    actual_nfft = max(nfft, n)
+    freqs = np.fft.rfftfreq(actual_nfft, d=1.0 / fps)
+    fft_vals = np.fft.rfft(windowed, n=actual_nfft, axis=1)
+    psd = np.abs(fft_vals) ** 2
+
+    valid_mask = (freqs >= min_freq) & (freqs <= max_freq)
+    if not np.any(valid_mask):
+        return np.zeros(k, dtype=np.float32)
+
+    valid_freqs = freqs[valid_mask]
+    valid_psd = psd[:, valid_mask]
+
+    # 3. Find dominant peak for each patch
+    peak_indices = np.argmax(valid_psd, axis=1)
+    peak_freqs = valid_freqs[peak_indices]
+
+    # 4. Signal band: peak +/- 0.1 Hz
+    freq_diffs = np.abs(valid_freqs[None, :] - peak_freqs[:, None])
+    signal_band = freq_diffs <= 0.1
+    noise_band = ~signal_band
+
+    signal_power = np.sum(valid_psd * signal_band, axis=1)
+    noise_power = np.sum(valid_psd * noise_band, axis=1)
+
+    snrs = signal_power / (noise_power + 1e-8)
+    return snrs.astype(np.float32)
 
 
 def calculate_snr(
     pulse_signal: Union[np.ndarray, Sequence[float]],
     fps: float,
     min_freq: float = MIN_FREQ_HZ,
-    max_freq: float = MAX_FREQ_HZ
+    max_freq: float = MAX_FREQ_HZ,
+    nfft: int = FFT_NFFT
 ) -> float:
     """
-    Calculates the Signal-to-Noise Ratio (SNR) of a pulse wave.
-    Defined as the ratio of power around the dominant heart rate peak 
-    to the total power in the physiological frequency band.
+    Calculates SNR for a single pulse wave.
     """
     sig = np.asarray(pulse_signal, dtype=np.float32)
-    if len(sig) == 0 or fps <= 0:
+    if len(sig) == 0:
         return 0.0
+    res = calculate_snr_batch(sig[None, :], fps, min_freq, max_freq, nfft)
+    return float(res[0])
 
-    freqs, psd = welch(sig, fs=fps, nperseg=len(sig))
 
-    # Find the indices corresponding to the full physiological band
-    valid_indices = np.where((freqs >= min_freq) & (freqs <= max_freq))[0]
-    if len(valid_indices) == 0:
-        return 0.0
-
-    valid_freqs = freqs[valid_indices]
-    valid_psd = psd[valid_indices]
-
-    # Find dominant peak
-    peak_idx = np.argmax(valid_psd)
-    peak_freq = valid_freqs[peak_idx]
-
-    # Define signal band as peak +/- 0.1 Hz
-    signal_band_mask = np.abs(valid_freqs - peak_freq) <= 0.1
-    noise_band_mask = ~signal_band_mask
-
-    signal_power = np.sum(valid_psd[signal_band_mask])
-    noise_power = np.sum(valid_psd[noise_band_mask])
-    
-    # Tiny epsilon to prevent division by zero
-    eps = 1e-8
-    
-    # Calculate SNR (often represented in linear scale for weighting, or log scale)
-    snr = signal_power / (noise_power + eps)
-    return float(snr)
 
 
 class OverlapAddProcessor:

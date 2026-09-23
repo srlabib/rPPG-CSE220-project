@@ -22,12 +22,14 @@ rPPG/
 
 | Module | Description |
 | :--- | :--- |
-| **`config.py`** | Centralized configuration holding MediaPipe landmark indices (`FOREHEAD_INDICES`, `LEFT_CHEEK_INDICES`, `RIGHT_CHEEK_INDICES`), physiological frequency boundaries (0.7 Hz - 3.0 Hz / 42 - 180 BPM), buffer lengths, and resolution defaults. |
-| **`signal_processing.py`** | Pure mathematical signal processing functions: <br>• `execute_pos_algorithm()`: Wang et al. (2017) POS projection algorithm.<br>• `butter_bandpass_filter()`: 6th-order zero-phase Butterworth filter (`scipy.signal.filtfilt`).<br>• `calculate_bpm()`: Power Spectral Density (PSD) via Welch's method (`scipy.signal.welch`). |
+| **`config.py`** | Centralized configuration holding 12-patch facial indices, physiological frequency boundaries (0.75 Hz - 2.5 Hz / 45 - 150 BPM), POS window (2.5s), and camera resolution defaults. |
+| **`signal_processing.py`** | Pure mathematical signal processing functions: <br>• `execute_pos_algorithm()` / `execute_pos_algorithm_batch()`: Wang et al. (2017) POS projection.<br>• `butter_bandpass_filter()`: 6th-order zero-phase Butterworth filter (`scipy.signal.filtfilt`).<br>• `calculate_bpm()`: Zero-padded 2048-pt FFT with linear detrending, Hann windowing, and sub-harmonic verification to eliminate harmonic doubling. |
 | **`face_processor.py`** | `FaceROIProcessor` class encapsulating MediaPipe FaceMesh lifecycle, extracting forehead and cheek skin regions, calculating mean RGB color vectors, and rendering semi-transparent overlays. |
 | **`visualizer.py`** | `create_pulse_graph()` for real-time oscilloscope display and `draw_hud()` for clean on-screen status readouts. |
-| **`rppg_pipeline.py`** | `RPPGPipeline` class maintaining sliding RGB windows, accumulated pulse buffers, and updating filtered signals and BPM measurements. |
+| **`rppg_pipeline.py`** | `RPPGPipeline` class maintaining sliding RGB windows, Top-K SNR selection, Overlap-Add pulse accumulation, and temporal smoothing (moving median + EMA) for stable heart rate readout. |
 | **`VideoProcessing.py`** | Application runner with CLI argument parsing, webcam/video file abstraction, keyboard control (`q`/`ESC`), and guaranteed cleanup via `try...finally`. |
+| **`evaluate.py`** | Offline benchmark script for dataset folders with `.xmp` ground truth files (e.g., `data/10-gt`). |
+| **`evaluate_subject.py`** | Offline benchmark script for UBFC-style datasets (e.g., `data/subject10`) with multi-line `ground_truth.txt` (PPG, HR, Timestep). Generates MAE, RMSE, Pearson $r$, Bias, and high-res comparison plots. |
 
 ---
 
@@ -56,7 +58,17 @@ To manually disable auto-exposure on webcams / DroidCam:
 python VideoProcessing.py --source 0 --camera-settings
 ```
 
-### 5. CLI Options Reference
+### 5. Run Offline Evaluation on Datasets
+- **For UBFC / Subject Datasets (e.g. `data/subject10`)**:
+  ```bash
+  python evaluate_subject.py --dataset data/subject10
+  ```
+- **For XMP Datasets (e.g. `data/10-gt`)**:
+  ```bash
+  python evaluate.py --dataset data/10-gt
+  ```
+
+### 6. CLI Options Reference
 ```
 options:
   -h, --help            Show this help message and exit
