@@ -89,20 +89,49 @@ def open_video_source(
     return cap
 
 
+def discover_data_videos(data_dir: str = "data") -> list:
+    """Recursively discovers all video files inside the data directory."""
+    valid_extensions = {".avi", ".mp4", ".mov", ".mkv", ".webm"}
+    videos = []
+    if os.path.exists(data_dir):
+        for root, _, files in os.walk(data_dir):
+            for f in files:
+                if os.path.splitext(f)[1].lower() in valid_extensions:
+                    rel_p = os.path.relpath(os.path.join(root, f)).replace("\\", "/")
+                    videos.append(rel_p)
+    return sorted(videos)
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parses command-line options for running the rPPG processor."""
     parser = argparse.ArgumentParser(
         description="Real-time rPPG Heart Rate Estimation from Face Video."
     )
     
-    # Default to data/10-gt/vid.avi if it exists, otherwise camera 0
-    default_source = "data/10-gt/vid.avi" if os.path.exists("data/10-gt/vid.avi") else "0"
+    # Smarter default: 10-gt if exists, else first discovered video in data/, else camera 0
+    available_videos = discover_data_videos("data")
+    if os.path.exists("data/10-gt/vid.avi"):
+        default_source = "data/10-gt/vid.avi"
+    elif available_videos:
+        default_source = available_videos[0]
+    else:
+        default_source = "0"
 
     parser.add_argument(
         "-s", "--source",
         type=str,
         default=default_source,
-        help="Path to video file or camera index (e.g., 0, 1, 'data/10-gt/vid.avi').",
+        help="Path to video file or camera index (e.g., 0, 1, 'data/gtdump.avi').",
+    )
+    parser.add_argument(
+        "--list-videos",
+        action="store_true",
+        help="List all video files discovered in data/ directory and exit.",
+    )
+    parser.add_argument(
+        "--select",
+        action="store_true",
+        help="Interactively select from video files discovered in data/.",
     )
     parser.add_argument(
         "--width",
@@ -262,9 +291,44 @@ def run_rppg(
 def main():
     """Entry point for command line invocation."""
     args = parse_arguments()
+
+    if args.list_videos:
+        videos = discover_data_videos("data")
+        if not videos:
+            print("[INFO] No video files found inside data/ directory.")
+        else:
+            print("\n=== Discovered Video Files in data/ ===")
+            for i, vid in enumerate(videos, start=1):
+                size_mb = os.path.getsize(vid) / (1024 * 1024)
+                print(f"  [{i}] {vid} ({size_mb:.1f} MB)")
+            print()
+        return
+
+    source = args.source
+    if args.select:
+        videos = discover_data_videos("data")
+        if not videos:
+            print("[ERROR] No video files found in data/ to select.")
+            sys.exit(1)
+        print("\n=== Select a Video File from data/ ===")
+        for i, vid in enumerate(videos, start=1):
+            size_mb = os.path.getsize(vid) / (1024 * 1024)
+            print(f"  [{i}] {vid} ({size_mb:.1f} MB)")
+        try:
+            choice = input(f"\nEnter choice [1-{len(videos)}] (default 1): ").strip()
+            idx = int(choice) - 1 if choice else 0
+            if 0 <= idx < len(videos):
+                source = videos[idx]
+            else:
+                print("[WARN] Invalid selection. Using first video.")
+                source = videos[0]
+        except (ValueError, KeyboardInterrupt):
+            print("\n[INFO] Exiting...")
+            return
+
     try:
         run_rppg(
-            source=args.source,
+            source=source,
             width=args.width,
             height=args.height,
             fps_override=args.fps,

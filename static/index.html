@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseVision rPPG | Real-Time Contactless Heart Rate Studio</title>
+  <meta name="description" content="State-of-the-art remote photoplethysmography (rPPG) web application using MediaPipe FaceMesh and POS algorithm for real-time contact-free heart rate extraction.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header / Navigation -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1 class="brand-title">PulseVision <span class="brand-badge">rPPG</span></h1>
+            <p class="brand-subtitle">Contactless Cardiovascular Bio-Sensing Lab</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="stream-status-pill" id="connection-pill">
+          <span class="status-dot pulse-dot"></span>
+          <span class="status-text" id="connection-text">CONNECTING...</span>
+        </div>
+        <div class="source-badge" id="source-badge">
+          <span class="source-icon">📷</span>
+          <span id="active-source-name">Detecting source...</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="header-metric">
+          <span class="metric-label">STREAM FPS</span>
+          <span class="metric-value font-mono" id="header-fps">--</span>
+        </div>
+        <div class="header-metric">
+          <span class="metric-label">SESSION TIME</span>
+          <span class="metric-value font-mono" id="session-time">00:00</span>
+        </div>
+        <button class="icon-btn" id="btn-open-settings" title="Adjust Parameters" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Dashboard Grid -->
+    <main class="dashboard-grid">
+      
+      <!-- Left Column: Live Video Feed & Controls -->
+      <section class="card video-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-tag">CAM FEED</span>
+            <h2 class="card-title">Facial Region Tracking</h2>
+          </div>
+          <div class="card-controls">
+            <label class="toggle-pill" title="Toggle green facial ROI patches">
+              <input type="checkbox" id="toggle-overlay" checked>
+              <span class="toggle-label">ROI Patches</span>
+            </label>
+            <span class="badge" id="face-detection-badge">SEARCHING FACE</span>
+          </div>
+        </div>
+
+        <!-- Video Viewport -->
+        <div class="video-viewport" id="video-container">
+          <img id="video-stream" src="/api/video_feed" alt="Real-time rPPG Camera Feed" crossorigin="anonymous">
+          <div class="viewport-overlay" id="viewport-overlay">
+            <div class="grid-crosshairs"></div>
+            <div class="viewport-hud-chip" id="hud-status">POS Engine Ready</div>
+          </div>
+          <!-- Standby Screen before source selection -->
+          <div class="standby-overlay" id="standby-overlay">
+            <div class="standby-content">
+              <div class="standby-icon">🎬</div>
+              <h3 class="standby-title">No Video Source Selected</h3>
+              <p class="standby-desc">Choose a video from the <code class="font-mono">data/</code> directory or connect a webcam to begin real-time rPPG extraction.</p>
+              <div class="standby-actions">
+                <button class="btn btn-primary" id="btn-standby-browse">
+                  <span class="btn-icon">📁</span>
+                  <span>Select from data/ Folder</span>
+                </button>
+                <button class="btn btn-secondary" id="btn-standby-webcam">
+                  <span class="btn-icon">📷</span>
+                  <span>Connect Webcam</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video Control Bar -->
+        <div class="video-controls-bar">
+          <div class="control-actions">
+            <button class="btn btn-primary" id="btn-play-pause">
+              <span class="btn-icon" id="play-pause-icon">⏸</span>
+              <span id="play-pause-text">Pause</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-reset" title="Flush rPPG buffers and restart calibration">
+              <span class="btn-icon">↺</span>
+              <span>Reset Signal</span>
+            </button>
+            <button class="btn btn-danger" id="btn-record" title="Record session time-series to CSV">
+              <span class="record-dot" id="record-dot"></span>
+              <span id="record-btn-text">Record</span>
+            </button>
+            <button class="btn btn-outline" id="btn-export" title="Download recorded session CSV">
+              <span class="btn-icon">⬇</span>
+              <span>Export CSV</span>
+            </button>
+          </div>
+
+          <!-- Source Selection Dropdown & Data Folder Quick Actions -->
+          <div class="source-selector-group">
+            <label for="source-select" class="control-label">Video Source:</label>
+            <select id="source-select" class="custom-select">
+              <option value="" disabled selected>Loading inputs...</option>
+            </select>
+            <button class="btn btn-outline" id="btn-browse-data" title="Explore and select any video inside data/ folder">
+              <span class="btn-icon">📁</span>
+              <span>Browse data/</span>
+            </button>
+            <button class="btn btn-ghost" id="btn-refresh-sources" title="Rescan data/ folder for newly added videos">
+              <span class="btn-icon">↺</span>
+              <span>Rescan</span>
+            </button>
+            <button class="btn btn-ghost" id="btn-upload-modal" title="Upload custom video file">
+              <span>+ Upload</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Vitals, Signal Quality, and ROI Activity -->
+      <section class="vitals-column">
+        
+        <!-- Primary Heart Rate Monitor Card -->
+        <div class="card bpm-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-tag tag-pulse">VITALS</span>
+              <h2 class="card-title">Real-Time Heart Rate</h2>
+            </div>
+            <span class="confidence-pill" id="bpm-state-badge">CALIBRATING</span>
+          </div>
+
+          <div class="bpm-hero-display">
+            <!-- Pulsing 3D Heart Graphic -->
+            <div class="heart-pulse-wrapper" id="heart-pulse-wrapper">
+              <div class="heart-pulse-ring"></div>
+              <div class="heart-icon-container" id="heart-icon-container">
+                <svg class="beating-heart" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Big BPM Numbers -->
+            <div class="bpm-readout-group">
+              <div class="bpm-number-wrapper">
+                <span class="bpm-number font-mono" id="bpm-value">--</span>
+                <span class="bpm-unit">BPM</span>
+              </div>
+              <div class="bpm-zone-tag" id="bpm-zone">Awaiting Signal</div>
+            </div>
+          </div>
+
+          <!-- Physiological Range Indicator Bar -->
+          <div class="bpm-range-bar-container">
+            <div class="range-labels">
+              <span>Resting (60-100)</span>
+              <span>Elevated (>100)</span>
+            </div>
+            <div class="range-bar-track">
+              <div class="range-zone athletic-zone" title="Athletic / Bradycardia (<60)"></div>
+              <div class="range-zone normal-zone" title="Normal Resting (60-100)"></div>
+              <div class="range-zone elevated-zone" title="Elevated / Tachycardia (>100)"></div>
+              <div class="range-marker" id="bpm-marker"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Signal Quality & Diagnostics Card -->
+        <div class="card quality-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-tag">QUALITY</span>
+              <h2 class="card-title">Signal-to-Noise Ratio (SNR)</h2>
+            </div>
+            <span class="snr-rating-badge" id="snr-rating">OPTIMAL</span>
+          </div>
+
+          <div class="snr-gauge-wrapper">
+            <div class="snr-metric-row">
+              <span class="snr-val font-mono" id="snr-value">0.00</span>
+              <span class="snr-unit">linear power ratio</span>
+            </div>
+            <div class="meter-bar-track">
+              <div class="meter-bar-fill" id="snr-bar-fill" style="width: 50%;"></div>
+            </div>
+          </div>
+
+          <!-- 12-Patch Spatial ROI Activity Grid -->
+          <div class="patches-section">
+            <div class="patches-header">
+              <span class="patches-title">12 Spatial Sub-Regions (Top-6 Fused)</span>
+              <span class="patches-count font-mono" id="active-patches-count">0/6 Active</span>
+            </div>
+            <div class="patches-grid" id="patches-grid">
+              <!-- 12 patches populated via Javascript -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Session Statistics Summary Card -->
+        <div class="card session-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <span class="card-tag">STATISTICS</span>
+              <h2 class="card-title">Session Aggregate</h2>
+            </div>
+            <span class="font-mono text-muted" id="recorded-count">0 samples</span>
+          </div>
+
+          <div class="session-stats-grid">
+            <div class="stat-box">
+              <span class="stat-name">MIN BPM</span>
+              <span class="stat-number font-mono" id="stat-min-bpm">--</span>
+            </div>
+            <div class="stat-box stat-highlight">
+              <span class="stat-name">AVG BPM</span>
+              <span class="stat-number font-mono" id="stat-avg-bpm">--</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-name">MAX BPM</span>
+              <span class="stat-number font-mono" id="stat-max-bpm">--</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Bottom Full-Width Section: Real-Time Pulse Wave Oscilloscope -->
+      <section class="card waveform-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="card-tag tag-cyan">OSCILLOSCOPE</span>
+            <h2 class="card-title">Accumulated Pulse Waveform (POS + Butterworth Bandpass 0.75 - 2.50 Hz)</h2>
+          </div>
+          <div class="waveform-meta">
+            <span class="font-mono text-cyan" id="live-amplitude">Amp: 0.0000</span>
+            <div class="view-mode-tabs">
+              <button class="tab-btn active" id="tab-pulse">Pulse Wave</button>
+              <button class="tab-btn" id="tab-trend">BPM Trend</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Oscilloscope Canvas Containers -->
+        <div class="canvas-wrapper">
+          <canvas id="pulse-canvas" width="1600" height="340"></canvas>
+          <canvas id="trend-canvas" width="1600" height="340" style="display: none;"></canvas>
+          
+          <div class="canvas-axes-labels">
+            <span class="axis-time-left">-4.0s</span>
+            <span class="axis-center-zero">0.0 (Baseline)</span>
+            <span class="axis-time-right">Now (Live)</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Settings Drawer / Modal -->
+    <div class="modal-backdrop" id="settings-modal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title">Pipeline Settings & Tuning</h3>
+          <button class="close-btn" id="btn-close-settings">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="setting-roi-alpha">ROI Polygon Tint Opacity: <span id="val-roi-alpha">0.25</span></label>
+            <input type="range" id="setting-roi-alpha" min="0.05" max="0.80" step="0.05" value="0.25" class="custom-range">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="setting-quality">Stream JPEG Quality: <span id="val-quality">80</span>%</label>
+            <input type="range" id="setting-quality" min="40" max="95" step="5" value="80" class="custom-range">
+          </div>
+          <div class="form-group-checkbox">
+            <input type="checkbox" id="setting-loop" checked>
+            <label for="setting-loop">Loop video playback automatically upon completion</label>
+          </div>
+          <div class="form-group-checkbox">
+            <input type="checkbox" id="setting-hud">
+            <label for="setting-hud">Render OpenCV In-Video HUD (embedded text overlay)</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="btn-save-settings">Apply Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Folder Browser & Video Selection Modal -->
+    <div class="modal-backdrop" id="data-browser-modal" style="display: none;">
+      <div class="modal-card modal-card-lg">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <span class="card-tag tag-cyan">FILE EXPLORER</span>
+            <h3 class="modal-title">Select Video from <code class="font-mono">data/</code> Directory</h3>
+          </div>
+          <button class="close-btn" id="btn-close-data-browser">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Search & Filter Controls -->
+          <div class="browser-filter-bar">
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="data-search-input" placeholder="Search videos or subfolders (e.g. gtdump, subject, .avi)..." class="custom-input">
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-rescan-data" title="Re-scan filesystem for newly added videos">
+              <span class="btn-icon">↺</span>
+              <span>Rescan data/</span>
+            </button>
+          </div>
+
+          <!-- Subfolder Filter Pills -->
+          <div class="folder-pills-bar" id="data-folder-pills">
+            <span class="folder-pill active" data-folder="all">All Subfolders</span>
+          </div>
+
+          <!-- Discovered Video Files List -->
+          <div class="video-files-list-container">
+            <div class="video-files-list" id="data-files-list">
+              <div class="loading-placeholder">Scanning data/ directory for video files...</div>
+            </div>
+          </div>
+
+          <!-- Direct Custom Path Input -->
+          <div class="manual-path-box">
+            <label class="form-label" for="manual-path-input">Or enter custom video path:</label>
+            <div class="manual-path-input-group">
+              <input type="text" id="manual-path-input" placeholder="e.g. data/subject10/vid.avi or data/10-gt/vid.avi" class="custom-input font-mono">
+              <button class="btn btn-primary" id="btn-load-manual-path">Verify & Play</button>
+            </div>
+            <div class="manual-path-status font-mono" id="manual-path-status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video Upload Modal -->
+    <div class="modal-backdrop" id="upload-modal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title">Upload Video for rPPG Analysis</h3>
+          <button class="close-btn" id="btn-close-upload">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="drop-zone" id="drop-zone">
+            <div class="drop-icon">📹</div>
+            <p class="drop-text">Drag and drop your video file here (.mp4, .avi, .mov, .webm)</p>
+            <p class="drop-subtext">or click to browse from your computer</p>
+            <input type="file" id="file-input" accept="video/mp4,video/avi,video/x-msvideo,video/quicktime,video/webm" style="display: none;">
+          </div>
+          <div class="upload-progress-wrapper" id="upload-progress-box" style="display: none;">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="upload-progress-fill"></div>
+            </div>
+            <span class="upload-status-text" id="upload-status-text">Uploading: 0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>PulseVision rPPG Studio &bull; CSE 220 Project &bull; Algorithmic Foundation: Wang et al. (2017) POS + MediaPipe FaceMesh</p>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/static/js/waveform.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
