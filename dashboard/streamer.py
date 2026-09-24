@@ -47,6 +47,7 @@ class RPPGStreamManager:
         self.current_bpm: Optional[float] = None
         self.latest_pulse: float = 0.0
         self.pulse_history: List[float] = []
+        self.raw_pulse_history: List[float] = []
         self.pred_history: List[Tuple[float, float]] = []  # (timestamp, bpm)
         self.current_timestamp: float = 0.0
         self.fps: float = 30.0
@@ -112,6 +113,7 @@ class RPPGStreamManager:
         self.current_bpm = None
         self.latest_pulse = 0.0
         self.pulse_history = []
+        self.raw_pulse_history = []
         self.pred_history = []
         self.current_timestamp = 0.0
         self.sqi = 0
@@ -142,6 +144,7 @@ class RPPGStreamManager:
                 "current_bpm": round(self.current_bpm, 1) if self.current_bpm else None,
                 "latest_pulse": round(self.latest_pulse, 4),
                 "pulse_history": list(self.pulse_history),
+                "raw_pulse_history": list(self.raw_pulse_history),
                 "sqi": self.sqi,
                 "face_detected": self.face_detected,
                 "status_text": self.status_text,
@@ -238,6 +241,8 @@ class RPPGStreamManager:
 
                 est_bpm = None
                 pulse_val = 0.0
+                norm_bvp = []
+                norm_raw = []
 
                 if has_face:
                     filtered_signal, raw_bpm, is_warming_up = pipeline.update(detection.mean_rgbs)
@@ -252,7 +257,7 @@ class RPPGStreamManager:
                     )
 
                     # Extract the true Butterworth-filtered BVP waveform for the oscilloscope
-                    norm_bvp = []
+                    raw_array = np.asarray(pipeline.pulse_buffer, dtype=np.float32)
                     if len(filtered_signal) >= 8:
                         recent_len = min(len(filtered_signal), 140)
                         recent_signal = filtered_signal[-recent_len:]
@@ -262,6 +267,16 @@ class RPPGStreamManager:
                         else:
                             norm_bvp = [0.0] * recent_len
                         pulse_val = float(filtered_signal[-1])
+
+                    # Extract the raw (pre-filter) pulse signal for the oscilloscope
+                    if len(raw_array) >= 8:
+                        raw_recent_len = min(len(raw_array), 140)
+                        raw_recent = raw_array[-raw_recent_len:]
+                        raw_peak = float(np.max(np.abs(raw_recent)))
+                        if raw_peak > 1e-6:
+                            norm_raw = (raw_recent / raw_peak).round(4).tolist()
+                        else:
+                            norm_raw = [0.0] * raw_recent_len
 
                 # Signal Quality Index (SQI)
                 sqi_val = 0
@@ -278,6 +293,8 @@ class RPPGStreamManager:
                     self.latest_pulse = pulse_val
                     if norm_bvp:
                         self.pulse_history = norm_bvp
+                    if norm_raw:
+                        self.raw_pulse_history = norm_raw
                     self.sqi = sqi_val
                     if total_frames > 0:
                         self.video_progress = min(100.0, (frame_count / total_frames) * 100.0)

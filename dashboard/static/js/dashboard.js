@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const canvas = document.getElementById("pulseCanvas");
     const ctx = canvas.getContext("2d");
     let pulseBuffer = [];
+    let rawPulseBuffer = [];
 
     // Resize canvas properly for retina displays
     function resizeCanvas() {
@@ -49,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 {
                     label: "Predicted rPPG (BPM)",
                     data: [],
-                    borderColor: "#10b981", // Vibrant Emerald
+                    borderColor: "#eb7a02", // Warm Orange
                     backgroundColor: "transparent",
                     borderWidth: 1.5, // Thin, sharp, standard line
                     pointRadius: 0,
@@ -350,6 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bpmChart.options.scales.y.suggestedMax = 100;
         bpmChart.update();
         pulseBuffer = [];
+        rawPulseBuffer = [];
         metricGtBpm.textContent = "--";
         metricError.textContent = "--";
         metricMae.textContent = "--";
@@ -507,6 +509,9 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.pulse_history && data.pulse_history.length > 0) {
                 pulseBuffer = data.pulse_history;
             }
+            if (data.raw_pulse_history && data.raw_pulse_history.length > 0) {
+                rawPulseBuffer = data.raw_pulse_history;
+            }
 
             // Append live predicted point to Chart.js
             if (data.current_bpm && data.timestamp > lastTimePoint + 0.3) {
@@ -581,7 +586,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.lineTo(w, h / 2);
         ctx.stroke();
 
-        if (pulseBuffer.length < 2) {
+        if (pulseBuffer.length < 2 && rawPulseBuffer.length < 2) {
             ctx.fillStyle = "rgba(156, 163, 175, 0.45)";
             ctx.font = "12px Inter, system-ui, sans-serif";
             ctx.textAlign = "center";
@@ -589,7 +594,33 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Draw pulse waveform with glow
+        const centerY = h / 2;
+        const scaleY = h * 0.38;
+
+        // Draw RAW (pre-filter) pulse waveform first (behind filtered)
+        if (rawPulseBuffer.length >= 2) {
+            ctx.strokeStyle = "rgba(156, 163, 175, 0.4)";
+            ctx.lineWidth = 1.4;
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+
+            const nRaw = rawPulseBuffer.length;
+            const dxRaw = w / (nRaw - 1);
+
+            for (let i = 0; i < nRaw; i++) {
+                const x = i * dxRaw;
+                const y = centerY - (rawPulseBuffer[i] * scaleY);
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+        }
+
+        // Draw FILTERED pulse waveform with glow (on top)
         ctx.strokeStyle = "#10b981";
         ctx.lineWidth = 2.2;
         ctx.shadowColor = "rgba(16, 185, 129, 0.6)";
@@ -598,8 +629,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const n = pulseBuffer.length;
         const dx = w / (n - 1);
-        const centerY = h / 2;
-        const scaleY = h * 0.38;
 
         for (let i = 0; i < n; i++) {
             const x = i * dx;
