@@ -14,6 +14,7 @@ from face_processor import FaceROIProcessor
 from rppg_pipeline import RPPGPipeline
 from config import DEFAULT_FPS, DEFAULT_CAM_WIDTH, DEFAULT_CAM_HEIGHT
 from dashboard.ground_truth import compute_live_metrics
+import VideoProcessing
 
 
 class RPPGStreamManager:
@@ -128,6 +129,7 @@ class RPPGStreamManager:
         """Stops the current streaming worker."""
         with self.lock:
             self.is_running = False
+        VideoProcessing.set_fast_forward(False)
         if self.worker_thread and self.worker_thread.is_alive():
             self.worker_thread.join(timeout=1.5)
         self.worker_thread = None
@@ -196,6 +198,7 @@ class RPPGStreamManager:
                 "progress": round(self.video_progress, 1),
                 "metrics": self.live_metrics,
                 "all_metrics": self.all_metrics,
+                "fast_forward": VideoProcessing.is_fast_forward(),
             }
 
     def _worker_loop(self):
@@ -410,11 +413,12 @@ class RPPGStreamManager:
                 with self.lock:
                     self.latest_jpeg = jpeg_bytes
 
-                # Throttle playback to match native video framerate
-                elapsed = time.perf_counter() - loop_start
-                sleep_time = frame_interval - elapsed
-                if sleep_time > 0.001:
-                    time.sleep(sleep_time)
+                # Throttle playback to match native video framerate (skipped during fast forward)
+                if not VideoProcessing.is_fast_forward():
+                    elapsed = time.perf_counter() - loop_start
+                    sleep_time = frame_interval - elapsed
+                    if sleep_time > 0.001:
+                        time.sleep(sleep_time)
 
         except Exception as e:
             with self.lock:

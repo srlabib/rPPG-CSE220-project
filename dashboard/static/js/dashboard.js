@@ -298,6 +298,47 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnStart = document.getElementById("btnStart");
     const btnPause = document.getElementById("btnPause");
     const btnStop = document.getElementById("btnStop");
+    const btnFastForward = document.getElementById("btnFastForward");
+    let isFastForward = false;
+
+    function updateFastForwardButtonVisibility() {
+        if (!btnFastForward) return;
+        if (currentMode === "upload" && isRunning) {
+            btnFastForward.style.display = "inline-flex";
+        } else {
+            btnFastForward.style.display = "none";
+        }
+    }
+
+    function updateFastForwardUI(active) {
+        isFastForward = !!active;
+        if (!btnFastForward) return;
+        if (isFastForward) {
+            btnFastForward.classList.add("active");
+            btnFastForward.innerHTML = '<span>⏩</span> Fast Forward: ON';
+        } else {
+            btnFastForward.classList.remove("active");
+            btnFastForward.innerHTML = '<span>⏩</span> Fast Forward';
+        }
+    }
+
+    if (btnFastForward) {
+        btnFastForward.addEventListener("click", async () => {
+            try {
+                const resp = await fetch("/api/control/", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "toggle_fast_forward" })
+                });
+                const data = await resp.json();
+                if (resp.ok && data.fast_forward !== undefined) {
+                    updateFastForwardUI(data.fast_forward);
+                }
+            } catch (err) {
+                console.error("Fast forward toggle error:", err);
+            }
+        });
+    }
 
     // Mode Switchers
     const tabWebcam = document.getElementById("tabWebcam");
@@ -324,6 +365,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabWebcam.classList.add("active");
         tabUpload.classList.remove("active");
         uploadPanel.classList.remove("active");
+        updateFastForwardButtonVisibility();
         resetCharts();
         bpmChart.data.datasets[0].hidden = true; // hide GT in webcam mode
         const gtBadge = document.getElementById("gtLegendBadge");
@@ -337,6 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabUpload.classList.add("active");
         tabWebcam.classList.remove("active");
         uploadPanel.classList.add("active");
+        updateFastForwardButtonVisibility();
         resetCharts();
         bpmChart.data.datasets[0].hidden = false;
         const gtBadge = document.getElementById("gtLegendBadge");
@@ -630,6 +673,8 @@ document.addEventListener("DOMContentLoaded", () => {
         btnPause.style.display = "inline-flex";
         btnStop.style.display = "inline-flex";
         btnPause.textContent = "⏸ Pause";
+        updateFastForwardButtonVisibility();
+        updateFastForwardUI(false);
 
         // Show stream
         videoPlaceholder.style.display = "none";
@@ -666,6 +711,8 @@ document.addEventListener("DOMContentLoaded", () => {
         btnStart.style.display = "inline-flex";
         btnPause.style.display = "none";
         btnStop.style.display = "none";
+        updateFastForwardButtonVisibility();
+        updateFastForwardUI(false);
 
         videoFeed.src = "";
         videoFeed.style.display = "none";
@@ -728,6 +775,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Status updates
             statusText.textContent = data.status_text || "Processing...";
+            if (data.fast_forward !== undefined && data.fast_forward !== isFastForward) {
+                updateFastForwardUI(data.fast_forward);
+            }
             if (data.face_detected) {
                 statusDot.className = "status-dot";
             } else {

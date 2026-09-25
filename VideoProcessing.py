@@ -34,6 +34,28 @@ from face_processor import FaceROIProcessor, FaceROIDetection
 from visualizer import create_pulse_graph, draw_hud
 from rppg_pipeline import RPPGPipeline
 
+# Fast forward playback control boolean
+FAST_FORWARD: bool = False
+
+
+def is_fast_forward() -> bool:
+    """Returns True if fast-forward playback is enabled."""
+    return FAST_FORWARD
+
+
+def set_fast_forward(enabled: bool) -> bool:
+    """Sets the fast-forward boolean state."""
+    global FAST_FORWARD
+    FAST_FORWARD = bool(enabled)
+    return FAST_FORWARD
+
+
+def toggle_fast_forward() -> bool:
+    """Toggles the fast-forward boolean state and returns the new value."""
+    global FAST_FORWARD
+    FAST_FORWARD = not FAST_FORWARD
+    return FAST_FORWARD
+
 
 def open_video_source(
     source: str,
@@ -254,12 +276,15 @@ def run_rppg(
                 elapsed = time.perf_counter() - frame_start_time
                 target_frame_sec = 1.0 / fps
                 remaining_ms = int((target_frame_sec - elapsed) * 1000)
-                frame_delay = 1 if is_camera else max(1, remaining_ms)
+                frame_delay = 1 if (is_camera or FAST_FORWARD) else max(1, remaining_ms)
 
                 # Keyboard interaction
                 key = cv.waitKey(frame_delay) & 0xFF
                 if key in (ord('q'), 27):  # 'q' or ESC
                     break
+                elif key in (ord('f'), ord('F')):  # 'f' toggles fast forward
+                    toggle_fast_forward()
+                    print(f"[INFO] Fast Forward: {'ON' if FAST_FORWARD else 'OFF'}")
 
     finally:
         cap.release()

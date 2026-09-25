@@ -263,5 +263,16 @@ def api_control(request):
         stream_mgr.stop()
         return JsonResponse({"status": "stopped"})
 
+    elif action == "toggle_fast_forward":
+        import VideoProcessing
+        new_state = VideoProcessing.toggle_fast_forward()
+        return JsonResponse({"status": "toggled_fast_forward", "fast_forward": new_state})
+
+    elif action == "set_fast_forward":
+        import VideoProcessing
+        val = data.get("fast_forward", False)
+        new_state = VideoProcessing.set_fast_forward(val)
+        return JsonResponse({"status": "set_fast_forward", "fast_forward": new_state})
+
     else:
         return JsonResponse({"error": f"Unknown action '{action}'"}, status=400)
