@@ -570,3 +570,326 @@ canvas#pulseCanvas {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Algorithm Selection Toolbar & Badges
+   ========================================================================== */
+.algo-bar {
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.65rem 2rem;
+  position: sticky;
+  top: 69px;
+  z-index: 90;
+}
+
+.algo-bar-inner {
+  max-width: 1600px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.algo-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.algo-pulse-indicator {
+  width: 8px;
+  height: 8px;
+  background-color: var(--accent-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--accent-cyan);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 12px var(--accent-cyan); }
+}
+
+.algo-btn-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.algo-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.9rem;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.algo-btn:hover {
+  background: rgba(55, 65, 81, 0.7);
+  color: var(--text-primary);
+  border-color: rgba(156, 163, 175, 0.4);
+  transform: translateY(-1px);
+}
+
+.algo-btn .algo-name {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.algo-btn .algo-citation {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.algo-btn.active {
+  background: rgba(31, 41, 55, 0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* Method-specific active states */
+.algo-btn[data-method="pos"].active {
+  border-color: #eb7a02;
+  box-shadow: 0 0 12px rgba(235, 122, 2, 0.25);
+}
+.algo-btn[data-method="pos"].active .algo-name {
+  color: #eb7a02;
+}
+
+.algo-btn[data-method="chrom"].active {
+  border-color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+.algo-btn[data-method="chrom"].active .algo-name {
+  color: #10b981;
+}
+
+.algo-btn[data-method="green"].active {
+  border-color: #a855f7;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+}
+.algo-btn[data-method="green"].active .algo-name {
+  color: #c084fc;
+}
+
+.algo-btn.btn-compare-all {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(16, 185, 129, 0.12));
+  border-color: rgba(6, 182, 212, 0.4);
+}
+.algo-btn.btn-compare-all:hover {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.22), rgba(16, 185, 129, 0.22));
+  border-color: var(--accent-cyan);
+}
+.algo-btn.btn-compare-all.active {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(16, 185, 129, 0.25));
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.35);
+}
+.algo-btn.btn-compare-all.active .algo-name {
+  color: #38bdf8;
+}
+
+/* Dots */
+.algo-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.dot-pos { background-color: #eb7a02; box-shadow: 0 0 6px rgba(235, 122, 2, 0.6); }
+.dot-chrom { background-color: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.6); }
+.dot-green { background-color: #a855f7; box-shadow: 0 0 6px rgba(168, 85, 247, 0.6); }
+.dot-all { background: linear-gradient(135deg, #06b6d4, #10b981); box-shadow: 0 0 6px rgba(6, 182, 212, 0.6); }
+
+/* Algorithm mini badge / tag */
+.algo-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.algo-tag.pos { background: rgba(235, 122, 2, 0.15); color: #f59e0b; border: 1px solid rgba(235, 122, 2, 0.4); }
+.algo-tag.chrom { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); }
+.algo-tag.green { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); }
+.algo-tag.all { background: rgba(6, 182, 212, 0.15); color: #38bdf8; border: 1px solid rgba(6, 182, 212, 0.4); }
+
+/* ==========================================================================
+   Compare All Vitals Grid (Tri-Method + SQI)
+   ========================================================================== */
+.compare-vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .compare-vitals-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.vital-card.pos-card {
+  border-left: 3px solid #eb7a02;
+}
+.vital-card.chrom-card {
+  border-left: 3px solid #10b981;
+}
+.vital-card.green-card {
+  border-left: 3px solid #a855f7;
+}
+.vital-card.sqi-card {
+  border-left: 3px solid var(--accent-cyan);
+}
+
+.pos-val { color: #f59e0b !important; }
+.chrom-val { color: #10b981 !important; }
+.green-val { color: #c084fc !important; }
+.cyan-val { color: var(--accent-cyan) !important; }
+
+/* Chart Legend Badges */
+.chart-legend-container {
+  display: flex;
+  gap: 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.legend-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.legend-badge:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.legend-badge.strike {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.legend-badge.gt { color: #38bdf8; }
+.legend-badge.pos { color: #eb7a02; }
+.legend-badge.chrom { color: #10b981; }
+.legend-badge.green { color: #c084fc; }
+
+.legend-line {
+  display: inline-block;
+  width: 14px;
+  height: 2.5px;
+  border-radius: 1px;
+}
+.line-gt { background: #38bdf8; }
+.line-pos { background: #eb7a02; }
+.line-chrom { background: #10b981; }
+.line-green { background: #a855f7; }
+
+/* ==========================================================================
+   Comparative Benchmark Leaderboard Table
+   ========================================================================== */
+.compare-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-elevated);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+.compare-table thead {
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.compare-table th {
+  padding: 0.65rem 0.9rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+
+.compare-table td {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid rgba(55, 65, 81, 0.4);
+  color: var(--text-primary);
+}
+
+.compare-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.compare-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.compare-table .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.compare-table .font-bold {
+  font-weight: 700;
+}
+
+.badge-status {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--text-muted);
+}
+
+.badge-status.best {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+}
+
+.badge-status.rank2 {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.badge-status.rank3 {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.compare-table tr.highlight-best {
+  background: rgba(16, 185, 129, 0.05);
+}
+

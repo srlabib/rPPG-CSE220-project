@@ -19,6 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let pulseBuffer = [];
     let rawPulseBuffer = [];
 
+    let currentMethod = "pos"; // "pos", "chrom", "green", or "all"
+
     // Resize canvas properly for retina displays
     function resizeCanvas() {
         const rect = canvas.getBoundingClientRect();
@@ -29,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 
-    // Chart.js: BPM vs Time
+    // Chart.js: BPM vs Time (Supports GT, POS, CHROM, GREEN)
     const chartCtx = document.getElementById("bpmChart").getContext("2d");
     const bpmChart = new Chart(chartCtx, {
         type: "line",
@@ -41,22 +43,44 @@ document.addEventListener("DOMContentLoaded", () => {
                     data: [],
                     borderColor: "#38bdf8", // Crisp Sky Blue
                     backgroundColor: "transparent",
-                    borderWidth: 1.5, // Thin, sharp, standard line
+                    borderWidth: 1.8,
                     pointRadius: 0,
                     pointHoverRadius: 3,
-                    tension: 0, // Sharp line segments
+                    tension: 0,
                     hidden: true,
                 },
                 {
-                    label: "Predicted rPPG (BPM)",
+                    label: "POS (Wang et al., 2017)",
                     data: [],
-                    borderColor: "#eb7a02", // Warm Orange
+                    borderColor: "#eb7a02", // Warm Amber/Orange
                     backgroundColor: "transparent",
-                    borderWidth: 1.5, // Thin, sharp, standard line
+                    borderWidth: 1.6,
                     pointRadius: 0,
                     pointHoverRadius: 3,
-                    tension: 0, // Sharp line segments
-                    fill: false,
+                    tension: 0,
+                    hidden: false,
+                },
+                {
+                    label: "CHROM (de Haan et al., 2013)",
+                    data: [],
+                    borderColor: "#10b981", // Emerald Neon
+                    backgroundColor: "transparent",
+                    borderWidth: 1.6,
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    tension: 0,
+                    hidden: true,
+                },
+                {
+                    label: "GREEN (Verkruysse et al., 2008)",
+                    data: [],
+                    borderColor: "#a855f7", // Electric Violet
+                    backgroundColor: "transparent",
+                    borderWidth: 1.6,
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    tension: 0,
+                    hidden: true,
                 }
             ]
         },
@@ -66,7 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
             animation: false,
             elements: {
                 line: {
-                    tension: 0 // Sharp, precise clinical line segments
+                    tension: 0
                 }
             },
             scales: {
@@ -88,7 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
             },
             plugins: {
                 legend: {
-                    display: false // Clean header badge indicators used instead
+                    display: false // Interactive header badge indicators used instead
                 },
                 tooltip: {
                     mode: "index",
@@ -108,12 +132,167 @@ document.addEventListener("DOMContentLoaded", () => {
     const statusText = document.getElementById("statusText");
     const statusDot = document.getElementById("statusDot");
 
-    // Benchmark Metric Elements
+    // Algorithm Switcher & Badges
+    const btnMethodPos = document.getElementById("btnMethodPos");
+    const btnMethodChrom = document.getElementById("btnMethodChrom");
+    const btnMethodGreen = document.getElementById("btnMethodGreen");
+    const btnMethodAll = document.getElementById("btnMethodAll");
+    const algoButtons = [btnMethodPos, btnMethodChrom, btnMethodGreen, btnMethodAll].filter(Boolean);
+
+    const videoMethodBadge = document.getElementById("videoMethodBadge");
+    const oscMethodBadge = document.getElementById("oscMethodBadge");
+    const vitalMethodLabel = document.getElementById("vitalMethodLabel");
+    const metricsMethodLabel = document.getElementById("metricsMethodLabel");
+
+    // Layout Containers
+    const singleVitalsGrid = document.getElementById("singleVitalsGrid");
+    const compareVitalsGrid = document.getElementById("compareVitalsGrid");
+    const singleMetricsContainer = document.getElementById("singleMetricsContainer");
+    const compareMetricsContainer = document.getElementById("compareMetricsContainer");
+
+    // Compare All Vitals Elements
+    const posBpmValue = document.getElementById("posBpmValue");
+    const chromBpmValue = document.getElementById("chromBpmValue");
+    const greenBpmValue = document.getElementById("greenBpmValue");
+    const compareSqiValue = document.getElementById("compareSqiValue");
+    const compareRefGtBpm = document.getElementById("compareRefGtBpm");
+
+    // Comparison Table Elements
+    const tblPosBpm = document.getElementById("tblPosBpm");
+    const tblPosError = document.getElementById("tblPosError");
+    const tblPosMae = document.getElementById("tblPosMae");
+    const tblPosRmse = document.getElementById("tblPosRmse");
+    const tblPosPearson = document.getElementById("tblPosPearson");
+    const tblPosBadge = document.getElementById("tblPosBadge");
+    const rowMetricPos = document.getElementById("rowMetricPos");
+
+    const tblChromBpm = document.getElementById("tblChromBpm");
+    const tblChromError = document.getElementById("tblChromError");
+    const tblChromMae = document.getElementById("tblChromMae");
+    const tblChromRmse = document.getElementById("tblChromRmse");
+    const tblChromPearson = document.getElementById("tblChromPearson");
+    const tblChromBadge = document.getElementById("tblChromBadge");
+    const rowMetricChrom = document.getElementById("rowMetricChrom");
+
+    const tblGreenBpm = document.getElementById("tblGreenBpm");
+    const tblGreenError = document.getElementById("tblGreenError");
+    const tblGreenMae = document.getElementById("tblGreenMae");
+    const tblGreenRmse = document.getElementById("tblGreenRmse");
+    const tblGreenPearson = document.getElementById("tblGreenPearson");
+    const tblGreenBadge = document.getElementById("tblGreenBadge");
+    const rowMetricGreen = document.getElementById("rowMetricGreen");
+
+    // Chart Legend Badges
+    const gtLegendBadge = document.getElementById("gtLegendBadge");
+    const posLegendBadge = document.getElementById("posLegendBadge");
+    const chromLegendBadge = document.getElementById("chromLegendBadge");
+    const greenLegendBadge = document.getElementById("greenLegendBadge");
+
+    // Benchmark Metric Elements (Single Mode)
     const metricGtBpm = document.getElementById("metricGtBpm");
     const metricError = document.getElementById("metricError");
     const metricMae = document.getElementById("metricMae");
     const metricRmse = document.getElementById("metricRmse");
     const metricPearson = document.getElementById("metricPearson");
+
+    // Method Switcher Controller
+    function setMethod(method) {
+        currentMethod = method;
+        algoButtons.forEach(btn => {
+            if (btn.dataset.method === method) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        });
+
+        const upper = method.toUpperCase();
+        if (videoMethodBadge) {
+            videoMethodBadge.textContent = (method === "all") ? "ALL 3" : upper;
+            videoMethodBadge.className = `algo-tag ${method}`;
+        }
+        if (oscMethodBadge) {
+            oscMethodBadge.textContent = (method === "all") ? "POS (Main)" : upper;
+            oscMethodBadge.className = `algo-tag ${method}`;
+        }
+
+        if (method === "all") {
+            if (singleVitalsGrid) singleVitalsGrid.style.display = "none";
+            if (compareVitalsGrid) compareVitalsGrid.style.display = "grid";
+            if (singleMetricsContainer) singleMetricsContainer.style.display = "none";
+            if (compareMetricsContainer) compareMetricsContainer.style.display = "block";
+
+            // Show all 3 rPPG legend badges
+            if (posLegendBadge) posLegendBadge.style.display = "flex";
+            if (chromLegendBadge) chromLegendBadge.style.display = "flex";
+            if (greenLegendBadge) greenLegendBadge.style.display = "flex";
+
+            // Unhide all 3 rPPG curves
+            bpmChart.data.datasets[1].hidden = false;
+            bpmChart.data.datasets[2].hidden = false;
+            bpmChart.data.datasets[3].hidden = false;
+        } else {
+            if (singleVitalsGrid) singleVitalsGrid.style.display = "grid";
+            if (compareVitalsGrid) compareVitalsGrid.style.display = "none";
+            if (singleMetricsContainer) singleMetricsContainer.style.display = "block";
+            if (compareMetricsContainer) compareMetricsContainer.style.display = "none";
+
+            if (vitalMethodLabel) {
+                vitalMethodLabel.textContent = `Heart Rate (rPPG ${upper})`;
+            }
+            if (metricsMethodLabel) {
+                metricsMethodLabel.textContent = upper;
+            }
+
+            // Show only the selected algorithm's legend badge
+            if (posLegendBadge) posLegendBadge.style.display = (method === "pos") ? "flex" : "none";
+            if (chromLegendBadge) chromLegendBadge.style.display = (method === "chrom") ? "flex" : "none";
+            if (greenLegendBadge) greenLegendBadge.style.display = (method === "green") ? "flex" : "none";
+
+            // Only show the selected curve in the graph
+            bpmChart.data.datasets[1].hidden = (method !== "pos");
+            bpmChart.data.datasets[2].hidden = (method !== "chrom");
+            bpmChart.data.datasets[3].hidden = (method !== "green");
+        }
+
+        // Keep Ground Truth visible if present and in upload mode
+        if (groundTruthData && currentMode === "upload") {
+            bpmChart.data.datasets[0].hidden = false;
+            if (gtLegendBadge) gtLegendBadge.style.display = "flex";
+        }
+
+        bpmChart.update();
+
+        // Inform backend stream manager of dynamic switch
+        fetch("/api/control/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "set_method", method: method })
+        }).catch(() => {});
+    }
+
+    algoButtons.forEach(btn => {
+        btn.addEventListener("click", () => setMethod(btn.dataset.method));
+    });
+
+    // Interactive Legend Badges to toggle individual curves on click
+    function setupLegendToggle(badgeEl, datasetIdx) {
+        if (!badgeEl) return;
+        badgeEl.addEventListener("click", () => {
+            const isHidden = !bpmChart.data.datasets[datasetIdx].hidden;
+            bpmChart.data.datasets[datasetIdx].hidden = isHidden;
+            if (isHidden) {
+                badgeEl.classList.add("strike");
+            } else {
+                badgeEl.classList.remove("strike");
+            }
+            bpmChart.update();
+        });
+    }
+    setupLegendToggle(gtLegendBadge, 0);
+    setupLegendToggle(posLegendBadge, 1);
+    setupLegendToggle(chromLegendBadge, 2);
+    setupLegendToggle(greenLegendBadge, 3);
 
     // Controls
     const btnStart = document.getElementById("btnStart");
@@ -345,6 +524,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function resetCharts() {
         bpmChart.data.datasets[0].data = [];
         bpmChart.data.datasets[1].data = [];
+        bpmChart.data.datasets[2].data = [];
+        bpmChart.data.datasets[3].data = [];
         bpmChart.options.scales.x.min = 0;
         bpmChart.options.scales.x.max = undefined;
         bpmChart.options.scales.y.suggestedMin = 60;
@@ -358,7 +539,25 @@ document.addEventListener("DOMContentLoaded", () => {
         metricRmse.textContent = "--";
         metricPearson.textContent = "--";
         bpmValue.textContent = "--";
+        if (posBpmValue) posBpmValue.textContent = "--";
+        if (chromBpmValue) chromBpmValue.textContent = "--";
+        if (greenBpmValue) greenBpmValue.textContent = "--";
+        if (compareRefGtBpm) compareRefGtBpm.textContent = "--";
+        resetCompareTable();
         videoProgressBar.style.width = "0%";
+    }
+
+    function resetCompareTable() {
+        const rows = [rowMetricPos, rowMetricChrom, rowMetricGreen];
+        rows.forEach(r => { if (r) r.classList.remove("highlight-best"); });
+        const badges = [tblPosBadge, tblChromBadge, tblGreenBadge];
+        badges.forEach(b => { if (b) b.innerHTML = '<span class="badge-status">Evaluating</span>'; });
+        const cells = [
+            tblPosBpm, tblPosError, tblPosMae, tblPosRmse, tblPosPearson,
+            tblChromBpm, tblChromError, tblChromMae, tblChromRmse, tblChromPearson,
+            tblGreenBpm, tblGreenError, tblGreenMae, tblGreenRmse, tblGreenPearson
+        ];
+        cells.forEach(c => { if (c) c.textContent = "--"; });
     }
 
     // Stream Controls
@@ -368,7 +567,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const resp = await fetch("/api/control/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "start_webcam", camera_index: 0 })
+                body: JSON.stringify({ action: "start_webcam", camera_index: 0, method: currentMethod })
             });
             if (resp.ok) {
                 startDisplay();
@@ -382,7 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const ok = await performUpload();
                     if (!ok) return;
                 } else {
-                    alert("Please select a video file to upload, or click '⚡ Load Sample (UBFC Subject 10)'.");
+                    alert("Please select a video file to upload, or choose a local dataset from /data.");
                     return;
                 }
             }
@@ -392,7 +591,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 action: "start_video",
                 video_path: uploadedVideoPath,
                 gt_times: groundTruthData ? groundTruthData.raw_times : [],
-                gt_hr: groundTruthData ? groundTruthData.raw_hr : []
+                gt_hr: groundTruthData ? groundTruthData.raw_hr : [],
+                method: currentMethod
             };
             const resp = await fetch("/api/control/", {
                 method: "POST",
@@ -438,8 +638,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         statusDot.className = "status-dot";
 
-        // Clear prediction dataset, keep pre-loaded ground truth if present
+        // Clear prediction datasets, keep pre-loaded ground truth if present
         bpmChart.data.datasets[1].data = [];
+        bpmChart.data.datasets[2].data = [];
+        bpmChart.data.datasets[3].data = [];
         lastTimePoint = -1;
         bpmChart.update();
 
@@ -472,6 +674,51 @@ document.addEventListener("DOMContentLoaded", () => {
         statusText.textContent = "Stopped";
     }
 
+    function updateCompareTableRow(m, bpm, elBpm, elErr, elMae, elRmse, elPearson) {
+        if (elBpm) elBpm.textContent = bpm ? bpm.toFixed(1) : "--";
+        if (!m) return;
+        if (elErr) elErr.textContent = m.current_error !== null ? `±${m.current_error}` : "--";
+        if (elMae) elMae.textContent = m.mae !== null ? m.mae : "--";
+        if (elRmse) elRmse.textContent = m.rmse !== null ? m.rmse : "--";
+        if (elPearson) elPearson.textContent = m.pearson_r !== null ? m.pearson_r : "--";
+    }
+
+    function rankMethods(allM) {
+        const list = [];
+        ["pos", "chrom", "green"].forEach(k => {
+            const m = allM[k];
+            if (m && m.mae !== null && m.mae > 0) {
+                list.push({ key: k, mae: m.mae });
+            }
+        });
+
+        // Reset highlight and badge texts
+        [rowMetricPos, rowMetricChrom, rowMetricGreen].forEach(r => { if (r) r.classList.remove("highlight-best"); });
+        [tblPosBadge, tblChromBadge, tblGreenBadge].forEach(b => {
+            if (b) b.innerHTML = '<span class="badge-status">Evaluating</span>';
+        });
+
+        if (list.length === 0) return;
+
+        list.sort((a, b) => a.mae - b.mae);
+
+        const badgeEls = { pos: tblPosBadge, chrom: tblChromBadge, green: tblGreenBadge };
+        const rowEls = { pos: rowMetricPos, chrom: rowMetricChrom, green: rowMetricGreen };
+
+        list.forEach((item, idx) => {
+            const b = badgeEls[item.key];
+            const r = rowEls[item.key];
+            if (idx === 0) {
+                if (b) b.innerHTML = '<span class="badge-status best">🏆 1st (Best)</span>';
+                if (r) r.classList.add("highlight-best");
+            } else if (idx === 1) {
+                if (b) b.innerHTML = '<span class="badge-status rank2">🥈 2nd</span>';
+            } else if (idx === 2) {
+                if (b) b.innerHTML = '<span class="badge-status rank3">🥉 3rd</span>';
+            }
+        });
+    }
+
     // Telemetry consumer
     let lastTimePoint = -1;
     async function fetchTelemetry() {
@@ -487,15 +734,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusDot.className = "status-dot warning";
             }
 
-            // BPM readout
+            const methodBpms = data.method_bpms || {};
+            const posBpm = methodBpms.pos;
+            const chromBpm = methodBpms.chrom;
+            const greenBpm = methodBpms.green;
+
+            // Single Vitals Readout
             if (data.current_bpm) {
                 bpmValue.textContent = data.current_bpm.toFixed(1);
-                // Adjust heart pulse animation speed to match BPM
                 const beatDuration = (60.0 / data.current_bpm).toFixed(2);
                 heartIcon.style.animationDuration = `${beatDuration}s`;
             } else {
                 bpmValue.textContent = "--";
             }
+
+            // Compare All 3 Vitals Readouts
+            if (posBpmValue) posBpmValue.textContent = posBpm ? posBpm.toFixed(1) : "--";
+            if (chromBpmValue) chromBpmValue.textContent = chromBpm ? chromBpm.toFixed(1) : "--";
+            if (greenBpmValue) greenBpmValue.textContent = greenBpm ? greenBpm.toFixed(1) : "--";
+            if (compareSqiValue) compareSqiValue.textContent = `${data.sqi}%`;
 
             // SQI
             sqiValue.textContent = `${data.sqi}%`;
@@ -506,27 +763,58 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // Pulse wave buffer for oscilloscope
-            if (data.pulse_history && data.pulse_history.length > 0) {
+            if (data.method_pulses) {
+                const activeKey = (currentMethod in data.method_pulses) ? currentMethod : "pos";
+                if (data.method_pulses[activeKey] && data.method_pulses[activeKey].length > 0) {
+                    pulseBuffer = data.method_pulses[activeKey];
+                }
+            } else if (data.pulse_history && data.pulse_history.length > 0) {
                 pulseBuffer = data.pulse_history;
             }
-            if (data.raw_pulse_history && data.raw_pulse_history.length > 0) {
+
+            if (data.method_raw_pulses) {
+                const activeRawKey = (currentMethod in data.method_raw_pulses) ? currentMethod : "pos";
+                if (data.method_raw_pulses[activeRawKey] && data.method_raw_pulses[activeRawKey].length > 0) {
+                    rawPulseBuffer = data.method_raw_pulses[activeRawKey];
+                }
+            } else if (data.raw_pulse_history && data.raw_pulse_history.length > 0) {
                 rawPulseBuffer = data.raw_pulse_history;
             }
 
-            // Append live predicted point to Chart.js
-            if (data.current_bpm && data.timestamp > lastTimePoint + 0.3) {
+            // Append live predicted points to Chart.js
+            if (data.timestamp > lastTimePoint + 0.3) {
                 lastTimePoint = data.timestamp;
-                bpmChart.data.datasets[1].data.push({
-                    x: data.timestamp,
-                    y: data.current_bpm
-                });
+                let chartUpdated = false;
 
-                // Auto slide window in webcam mode
-                if (currentMode === "webcam" && data.timestamp > 30) {
-                    bpmChart.options.scales.x.min = data.timestamp - 30;
-                    bpmChart.options.scales.x.max = data.timestamp;
+                if (currentMethod === "all") {
+                    if (posBpm) {
+                        bpmChart.data.datasets[1].data.push({ x: data.timestamp, y: posBpm });
+                        chartUpdated = true;
+                    }
+                    if (chromBpm) {
+                        bpmChart.data.datasets[2].data.push({ x: data.timestamp, y: chromBpm });
+                        chartUpdated = true;
+                    }
+                    if (greenBpm) {
+                        bpmChart.data.datasets[3].data.push({ x: data.timestamp, y: greenBpm });
+                        chartUpdated = true;
+                    }
+                } else {
+                    const dsIdx = (currentMethod === "chrom") ? 2 : ((currentMethod === "green") ? 3 : 1);
+                    if (data.current_bpm) {
+                        bpmChart.data.datasets[dsIdx].data.push({ x: data.timestamp, y: data.current_bpm });
+                        chartUpdated = true;
+                    }
                 }
-                bpmChart.update("none");
+
+                if (chartUpdated) {
+                    // Auto slide window in webcam mode
+                    if (currentMode === "webcam" && data.timestamp > 30) {
+                        bpmChart.options.scales.x.min = data.timestamp - 30;
+                        bpmChart.options.scales.x.max = data.timestamp;
+                    }
+                    bpmChart.update("none");
+                }
             }
 
             // Performance Benchmark Metrics (in Upload Mode with GT)
@@ -537,6 +825,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 metricMae.textContent = m.mae !== null ? `${m.mae} BPM` : "--";
                 metricRmse.textContent = m.rmse !== null ? `${m.rmse} BPM` : "--";
                 metricPearson.textContent = m.pearson_r !== null ? m.pearson_r : "--";
+                if (compareRefGtBpm) {
+                    compareRefGtBpm.textContent = m.latest_gt !== null ? `${m.latest_gt} BPM` : "--";
+                }
+            }
+
+            // Comparative Leaderboard Table
+            if (data.all_metrics) {
+                const allM = data.all_metrics;
+                updateCompareTableRow(allM.pos, posBpm, tblPosBpm, tblPosError, tblPosMae, tblPosRmse, tblPosPearson);
+                updateCompareTableRow(allM.chrom, chromBpm, tblChromBpm, tblChromError, tblChromMae, tblChromRmse, tblChromPearson);
+                updateCompareTableRow(allM.green, greenBpm, tblGreenBpm, tblGreenError, tblGreenMae, tblGreenRmse, tblGreenPearson);
+                rankMethods(allM);
             }
 
             // Grace period check: don't stop prematurely on startup
@@ -620,10 +920,14 @@ document.addEventListener("DOMContentLoaded", () => {
             ctx.stroke();
         }
 
-        // Draw FILTERED pulse waveform with glow (on top)
-        ctx.strokeStyle = "#10b981";
+        // Draw FILTERED pulse waveform with dynamic algorithm color & glow (on top)
+        const strokeColor = (currentMethod === "pos" || currentMethod === "all") ? "#eb7a02" : ((currentMethod === "green") ? "#c084fc" : "#10b981");
+        const glowColor = (currentMethod === "pos" || currentMethod === "all") ? "rgba(235, 122, 2, 0.6)" : ((currentMethod === "green") ? "rgba(192, 132, 252, 0.6)" : "rgba(16, 185, 129, 0.6)");
+        const gradColor = (currentMethod === "pos" || currentMethod === "all") ? "rgba(235, 122, 2, 0.12)" : ((currentMethod === "green") ? "rgba(168, 85, 247, 0.12)" : "rgba(16, 185, 129, 0.12)");
+
+        ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 2.2;
-        ctx.shadowColor = "rgba(16, 185, 129, 0.6)";
+        ctx.shadowColor = glowColor;
         ctx.shadowBlur = 8;
         ctx.beginPath();
 
@@ -647,8 +951,8 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.lineTo(0, centerY);
         ctx.closePath();
         const grad = ctx.createLinearGradient(0, centerY - scaleY, 0, centerY + scaleY);
-        grad.addColorStop(0, "rgba(16, 185, 129, 0.12)");
-        grad.addColorStop(1, "rgba(16, 185, 129, 0.0)");
+        grad.addColorStop(0, gradColor);
+        grad.addColorStop(1, "rgba(0, 0, 0, 0.0)");
         ctx.fillStyle = grad;
         ctx.fill();
     }

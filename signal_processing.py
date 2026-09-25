@@ -95,6 +95,159 @@ def execute_pos_algorithm_batch(
     return h_centered
 
 
+def execute_chrom_algorithm(
+    temporal_matrix: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """
+    Executes the Chrominance-based (CHROM) rPPG algorithm on a sliding window of RGB data.
+    
+    Reference:
+        de Haan, G., & Jeanne, V. (2013).
+        Robust pulse rate from chrominance-based rPPG. IEEE TBME, 60(10), 2878-2886.
+
+    Args:
+        temporal_matrix: 2D array of shape (3, N) -> [R, G, B] over N frames.
+        eps: Small epsilon to prevent division by zero in dark frames.
+
+    Returns:
+        h_centered: 1D extracted pulse wave (length N), mean-centered for this window.
+    """
+    r = temporal_matrix[0, :]
+    g = temporal_matrix[1, :]
+    b = temporal_matrix[2, :]
+
+    # 1. Temporal Normalization
+    r_n = r / (np.mean(r) + eps)
+    g_n = g / (np.mean(g) + eps)
+    b_n = b / (np.mean(b) + eps)
+
+    # 2. Chrominance projection: Xs and Ys orthogonal color difference signals
+    xs = 3.0 * r_n - 2.0 * g_n
+    ys = 1.5 * r_n + g_n - 1.5 * b_n
+
+    # 3. Dynamic Alpha tuning
+    sigma_xs = np.std(xs)
+    sigma_ys = np.std(ys)
+    alpha = sigma_xs / (sigma_ys + eps)
+
+    # 4. Extract raw pulse signal
+    h = xs - alpha * ys
+
+    # 5. Mean-centering
+    h_centered = h - np.mean(h)
+    return h_centered
+
+
+def execute_chrom_algorithm_batch(
+    temporal_tensor: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """
+    Executes the Chrominance-based (CHROM) algorithm across multiple patches simultaneously.
+
+    Args:
+        temporal_tensor: 3D array of shape (K, 3, N) -> K patches, 3 channels (R,G,B), N frames.
+        eps: Numerical stability constant.
+
+    Returns:
+        h_centered: 2D array of shape (K, N) of extracted, mean-centered pulse signals.
+    """
+    r = temporal_tensor[:, 0, :]
+    g = temporal_tensor[:, 1, :]
+    b = temporal_tensor[:, 2, :]
+
+    r_n = r / (np.mean(r, axis=1, keepdims=True) + eps)
+    g_n = g / (np.mean(g, axis=1, keepdims=True) + eps)
+    b_n = b / (np.mean(b, axis=1, keepdims=True) + eps)
+
+    xs = 3.0 * r_n - 2.0 * g_n
+    ys = 1.5 * r_n + g_n - 1.5 * b_n
+
+    sigma_xs = np.std(xs, axis=1, keepdims=True)
+    sigma_ys = np.std(ys, axis=1, keepdims=True)
+    alpha = sigma_xs / (sigma_ys + eps)
+
+    h = xs - alpha * ys
+    h_centered = h - np.mean(h, axis=1, keepdims=True)
+    return h_centered
+
+
+def execute_green_algorithm(
+    temporal_matrix: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """
+    Executes the Green-channel rPPG algorithm on a sliding window of RGB data.
+
+    Reference:
+        Verkruysse, W., Svaasand, L. O., & Nelson, J. S. (2008).
+        Remote plethysmographic imaging using ambient light. Optics Express, 16(26), 21434-21445.
+
+    Args:
+        temporal_matrix: 2D array of shape (3, N) -> [R, G, B] over N frames.
+        eps: Small epsilon to prevent division by zero in dark frames.
+
+    Returns:
+        h_centered: 1D extracted pulse wave (length N), mean-centered for this window.
+    """
+    g = temporal_matrix[1, :]
+
+    # 1. Temporal Normalization
+    g_n = g / (np.mean(g) + eps)
+
+    # 2. Invert normalized green variation so systolic peak is positive
+    h = -g_n
+
+    # 3. Mean-centering
+    h_centered = h - np.mean(h)
+    return h_centered
+
+
+def execute_green_algorithm_batch(
+    temporal_tensor: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """
+    Executes the Green-channel algorithm across multiple patches simultaneously.
+
+    Args:
+        temporal_tensor: 3D array of shape (K, 3, N) -> K patches, 3 channels (R,G,B), N frames.
+        eps: Numerical stability constant.
+
+    Returns:
+        h_centered: 2D array of shape (K, N) of extracted, mean-centered pulse signals.
+    """
+    g = temporal_tensor[:, 1, :]
+    g_n = g / (np.mean(g, axis=1, keepdims=True) + eps)
+    h = -g_n
+    h_centered = h - np.mean(h, axis=1, keepdims=True)
+    return h_centered
+
+
+def extract_pulse_batch(
+    temporal_tensor: np.ndarray,
+    method: str = "pos",
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """
+    Dispatches pulse extraction across multiple patches using the requested algorithm.
+
+    Supported methods:
+        - 'pos': Plane-Orthogonal-to-Skin (Wang et al., 2017)
+        - 'chrom': Chrominance-based method (de Haan & Jeanne, 2013)
+        - 'green': Normalized Green Channel (Verkruysse et al., 2008)
+    """
+    m = (method or "pos").lower().strip()
+    if m == "chrom":
+        return execute_chrom_algorithm_batch(temporal_tensor, eps=eps)
+    elif m == "green":
+        return execute_green_algorithm_batch(temporal_tensor, eps=eps)
+    else:  # default 'pos'
+        return execute_pos_algorithm_batch(temporal_tensor, eps=eps)
+
+
+
 
 def butter_bandpass_filter(
     data: Union[np.ndarray, Sequence[float]],

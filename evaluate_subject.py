@@ -49,6 +49,13 @@ def parse_arguments() -> argparse.Namespace:
         help="Seconds to skip at the beginning before calculating metrics (stabilization period, default: 15.0)."
     )
     parser.add_argument(
+        "-m", "--method",
+        type=str,
+        default="pos",
+        choices=["pos", "chrom", "green"],
+        help="rPPG extraction algorithm: pos, chrom, or green (default: pos)."
+    )
+    parser.add_argument(
         "--save-csv",
         action="store_true",
         help="If set, exports timestamp, estimated HR, and ground truth HR to evaluation_metrics.csv."
@@ -220,9 +227,8 @@ def run_evaluation(
     fps = detected_fps if detected_fps > 0 else DEFAULT_FPS
     total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
     print(f"[INFO] Video resolution: {int(cap.get(cv.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))}")
-    print(f"[INFO] Processing {total_frames} frames at {fps:.2f} FPS...")
-
-    pipeline = RPPGPipeline(fps=fps)
+    print(f"[INFO] Using rPPG Algorithm: {args.method.upper()}")
+    pipeline = RPPGPipeline(fps=fps, method=args.method)
 
     est_times = []
     est_hr = []

@@ -33,6 +33,7 @@ class RPPGStreamManager:
         self.is_running = False
         self.is_paused = False
         self.mode = "webcam"  # "webcam" or "upload"
+        self.method: str = "pos"  # "pos", "chrom", "green", or "all"
         self.source_path: Any = 0
         self.gt_times: List[float] = []
         self.gt_hr: List[float] = []
@@ -45,10 +46,14 @@ class RPPGStreamManager:
 
         # Telemetry & Metrics state
         self.current_bpm: Optional[float] = None
+        self.method_bpms: Dict[str, Optional[float]] = {"pos": None, "chrom": None, "green": None}
         self.latest_pulse: float = 0.0
         self.pulse_history: List[float] = []
         self.raw_pulse_history: List[float] = []
-        self.pred_history: List[Tuple[float, float]] = []  # (timestamp, bpm)
+        self.method_pulses: Dict[str, List[float]] = {"pos": [], "chrom": [], "green": []}
+        self.method_raw_pulses: Dict[str, List[float]] = {"pos": [], "chrom": [], "green": []}
+        self.pred_history: List[Tuple[float, float]] = []  # active method (timestamp, bpm)
+        self.pred_histories: Dict[str, List[Tuple[float, float]]] = {"pos": [], "chrom": [], "green": []}
         self.current_timestamp: float = 0.0
         self.fps: float = 30.0
         self.sqi: int = 0
@@ -65,12 +70,29 @@ class RPPGStreamManager:
             "pearson_r": None,
             "count": 0
         }
+        self.all_metrics: Dict[str, Dict[str, Any]] = {
+            "pos": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+            "chrom": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+            "green": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+        }
 
-    def start_webcam(self, camera_index: int = 0):
+    def set_method(self, method: str):
+        """Switches the active evaluation / display method ('pos', 'chrom', 'green', or 'all')."""
+        with self.lock:
+            m = (method or "pos").lower().strip()
+            if m in ["pos", "chrom", "green", "all"]:
+                self.method = m
+                # Update current_bpm and live_metrics to reflect newly selected method
+                if m != "all" and m in self.method_bpms:
+                    self.current_bpm = self.method_bpms[m]
+                    self.live_metrics = self.all_metrics.get(m, self.live_metrics)
+
+    def start_webcam(self, camera_index: int = 0, method: str = "pos"):
         """Starts real-time analysis using local webcam."""
         self.stop()
         with self.lock:
             self.mode = "webcam"
+            self.method = (method or "pos").lower().strip()
             self.source_path = camera_index
             self.gt_times = []
             self.gt_hr = []
@@ -81,11 +103,12 @@ class RPPGStreamManager:
         self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.worker_thread.start()
 
-    def start_video(self, video_path: str, gt_times: Optional[List[float]] = None, gt_hr: Optional[List[float]] = None):
+    def start_video(self, video_path: str, gt_times: Optional[List[float]] = None, gt_hr: Optional[List[float]] = None, method: str = "pos"):
         """Starts playback and evaluation of an uploaded video."""
         self.stop()
         with self.lock:
             self.mode = "upload"
+            self.method = (method or "pos").lower().strip()
             self.source_path = video_path
             self.gt_times = gt_times or []
             self.gt_hr = gt_hr or []
@@ -111,14 +134,18 @@ class RPPGStreamManager:
 
     def _reset_state(self):
         self.current_bpm = None
+        self.method_bpms = {"pos": None, "chrom": None, "green": None}
         self.latest_pulse = 0.0
         self.pulse_history = []
         self.raw_pulse_history = []
+        self.method_pulses = {"pos": [], "chrom": [], "green": []}
+        self.method_raw_pulses = {"pos": [], "chrom": [], "green": []}
         self.pred_history = []
+        self.pred_histories = {"pos": [], "chrom": [], "green": []}
         self.current_timestamp = 0.0
         self.sqi = 0
         self.face_detected = False
-        self.status_text = "Initializing pipeline..."
+        self.status_text = "Initializing rPPG pipelines..."
         self.video_progress = 0.0
         self.live_metrics = {
             "current_error": None,
@@ -128,6 +155,11 @@ class RPPGStreamManager:
             "pearson_r": None,
             "count": 0
         }
+        self.all_metrics = {
+            "pos": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+            "chrom": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+            "green": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+        }
 
     def get_latest_jpeg(self) -> Optional[bytes]:
         with self.lock:
@@ -135,21 +167,35 @@ class RPPGStreamManager:
 
     def get_telemetry(self) -> Dict[str, Any]:
         with self.lock:
+            active_m = self.method
+            active_bpm = self.current_bpm
+            if active_m in self.method_bpms and self.method_bpms[active_m] is not None:
+                active_bpm = self.method_bpms[active_m]
+            elif active_m == "all" and self.method_bpms["pos"] is not None:
+                active_bpm = self.method_bpms["pos"]
+
             return {
                 "running": self.is_running,
                 "paused": self.is_paused,
                 "mode": self.mode,
+                "method": self.method,
                 "timestamp": round(self.current_timestamp, 2),
                 "fps": round(self.fps, 1),
-                "current_bpm": round(self.current_bpm, 1) if self.current_bpm else None,
+                "current_bpm": round(active_bpm, 1) if active_bpm else None,
+                "method_bpms": {
+                    k: (round(v, 1) if v is not None else None)
+                    for k, v in self.method_bpms.items()
+                },
                 "latest_pulse": round(self.latest_pulse, 4),
                 "pulse_history": list(self.pulse_history),
                 "raw_pulse_history": list(self.raw_pulse_history),
+                "method_pulses": self.method_pulses,
                 "sqi": self.sqi,
                 "face_detected": self.face_detected,
                 "status_text": self.status_text,
                 "progress": round(self.video_progress, 1),
                 "metrics": self.live_metrics,
+                "all_metrics": self.all_metrics,
             }
 
     def _worker_loop(self):
@@ -190,7 +236,12 @@ class RPPGStreamManager:
 
             self.fps = target_fps
             face_processor = FaceROIProcessor()
-            pipeline = RPPGPipeline(fps=target_fps)
+            # Initialize concurrent rPPG pipelines for all three algorithms
+            pipelines = {
+                "pos": RPPGPipeline(fps=target_fps, method="pos"),
+                "chrom": RPPGPipeline(fps=target_fps, method="chrom"),
+                "green": RPPGPipeline(fps=target_fps, method="green"),
+            }
 
             frame_interval = 1.0 / target_fps
             frame_count = 0
@@ -201,6 +252,7 @@ class RPPGStreamManager:
                     if not self.is_running:
                         break
                     paused = self.is_paused
+                    current_method = self.method
 
                 if paused:
                     time.sleep(0.05)
@@ -239,48 +291,63 @@ class RPPGStreamManager:
                 detection = face_processor.process_frame(frame)
                 has_face = detection.detected and (detection.mean_rgbs is not None)
 
+                results = {}
+                active_key = current_method if current_method in pipelines else "pos"
+                method_bvp_dict = {"pos": [], "chrom": [], "green": []}
+                method_raw_dict = {"pos": [], "chrom": [], "green": []}
+                method_bpms_now = {"pos": None, "chrom": None, "green": None}
                 est_bpm = None
                 pulse_val = 0.0
                 norm_bvp = []
                 norm_raw = []
 
                 if has_face:
-                    filtered_signal, raw_bpm, is_warming_up = pipeline.update(detection.mean_rgbs)
-                    if not is_warming_up and raw_bpm and raw_bpm > 0:
-                        est_bpm = raw_bpm
+                    # Run all pipelines concurrently on the extracted skin mean RGBs
+                    for m_name, pipe in pipelines.items():
+                        filt, raw_bpm, is_warming = pipe.update(detection.mean_rgbs)
+                        valid_bpm = raw_bpm if (not is_warming and raw_bpm and raw_bpm > 0) else None
+                        results[m_name] = {
+                            "filtered": filt,
+                            "bpm": valid_bpm,
+                            "warming": is_warming,
+                            "pipe": pipe
+                        }
+                        method_bpms_now[m_name] = valid_bpm
 
-                    # Render semi-transparent patch overlays
+                        # Extract filtered BVP
+                        if len(filt) >= 8:
+                            rec_len = min(len(filt), 140)
+                            rec = filt[-rec_len:]
+                            p_max = float(np.max(np.abs(rec)))
+                            method_bvp_dict[m_name] = (rec / p_max).round(4).tolist() if p_max > 1e-6 else [0.0] * rec_len
+
+                        # Extract raw pulse
+                        raw_arr = np.asarray(pipe.pulse_buffer, dtype=np.float32)
+                        if len(raw_arr) >= 8:
+                            raw_rec_len = min(len(raw_arr), 140)
+                            raw_rec = raw_arr[-raw_rec_len:]
+                            r_max = float(np.max(np.abs(raw_rec)))
+                            method_raw_dict[m_name] = (raw_rec / r_max).round(4).tolist() if r_max > 1e-6 else [0.0] * raw_rec_len
+
+                    # Active overlay pipeline
+                    active_pipe = pipelines[active_key]
                     display_frame = face_processor.render_roi_overlay(
                         frame,
-                        active_indices=pipeline.active_patch_indices,
+                        active_indices=active_pipe.active_patch_indices,
                         polys=detection.polys
                     )
 
-                    # Extract the true Butterworth-filtered BVP waveform for the oscilloscope
-                    raw_array = np.asarray(pipeline.pulse_buffer, dtype=np.float32)
-                    if len(filtered_signal) >= 8:
-                        recent_len = min(len(filtered_signal), 140)
-                        recent_signal = filtered_signal[-recent_len:]
-                        peak_amp = float(np.max(np.abs(recent_signal)))
-                        if peak_amp > 1e-6:
-                            norm_bvp = (recent_signal / peak_amp).round(4).tolist()
-                        else:
-                            norm_bvp = [0.0] * recent_len
-                        pulse_val = float(filtered_signal[-1])
-
-                    # Extract the raw (pre-filter) pulse signal for the oscilloscope
-                    if len(raw_array) >= 8:
-                        raw_recent_len = min(len(raw_array), 140)
-                        raw_recent = raw_array[-raw_recent_len:]
-                        raw_peak = float(np.max(np.abs(raw_recent)))
-                        if raw_peak > 1e-6:
-                            norm_raw = (raw_recent / raw_peak).round(4).tolist()
-                        else:
-                            norm_raw = [0.0] * raw_recent_len
+                    norm_bvp = method_bvp_dict.get(active_key, [])
+                    norm_raw = method_raw_dict.get(active_key, [])
+                    est_bpm = method_bpms_now.get(active_key)
+                    if len(results[active_key]["filtered"]) > 0:
+                        pulse_val = float(results[active_key]["filtered"][-1])
+                else:
+                    active_pipe = pipelines[active_key]
 
                 # Signal Quality Index (SQI)
                 sqi_val = 0
-                if has_face and len(pipeline.pulse_buffer) >= pipeline.min_samples_for_bpm:
+                if has_face and len(active_pipe.pulse_buffer) >= active_pipe.min_samples_for_bpm:
                     sqi_val = 85 if est_bpm is not None else 50
                 elif has_face:
                     sqi_val = 40
@@ -289,8 +356,11 @@ class RPPGStreamManager:
                 with self.lock:
                     self.face_detected = has_face
                     self.current_timestamp = current_time_sec
+                    self.method_bpms = method_bpms_now
                     self.current_bpm = est_bpm
                     self.latest_pulse = pulse_val
+                    self.method_pulses = method_bvp_dict
+                    self.method_raw_pulses = method_raw_dict
                     if norm_bvp:
                         self.pulse_history = norm_bvp
                     if norm_raw:
@@ -300,25 +370,38 @@ class RPPGStreamManager:
                         self.video_progress = min(100.0, (frame_count / total_frames) * 100.0)
 
                     if has_face:
+                        for m in ["pos", "chrom", "green"]:
+                            if method_bpms_now[m] is not None:
+                                self.pred_histories[m].append((current_time_sec, method_bpms_now[m]))
+
                         if est_bpm is not None:
-                            self.status_text = f"Tracking: {est_bpm:.1f} BPM"
                             self.pred_history.append((current_time_sec, est_bpm))
+                            if current_method == "all":
+                                p_str = f"P:{method_bpms_now['pos']:.1f}" if method_bpms_now['pos'] else "P:--"
+                                c_str = f"C:{method_bpms_now['chrom']:.1f}" if method_bpms_now['chrom'] else "C:--"
+                                g_str = f"G:{method_bpms_now['green']:.1f}" if method_bpms_now['green'] else "G:--"
+                                self.status_text = f"Tracking: {p_str} | {c_str} | {g_str} BPM"
+                            else:
+                                self.status_text = f"Tracking ({current_method.upper()}): {est_bpm:.1f} BPM"
                         else:
                             self.status_text = "Buffering skin pulse..."
                     else:
                         self.status_text = "Searching for face..."
 
-                    # Live metrics against ground truth
-                    if self.gt_times and self.gt_hr and len(self.pred_history) > 0:
-                        self.live_metrics = compute_live_metrics(
-                            self.pred_history,
-                            self.gt_times,
-                            self.gt_hr,
-                            skip_seconds=15.0
-                        )
+                    # Live metrics against ground truth for all methods
+                    if self.gt_times and self.gt_hr:
+                        for m in ["pos", "chrom", "green"]:
+                            if len(self.pred_histories[m]) > 0:
+                                self.all_metrics[m] = compute_live_metrics(
+                                    self.pred_histories[m],
+                                    self.gt_times,
+                                    self.gt_hr,
+                                    skip_seconds=15.0
+                                )
+                        self.live_metrics = self.all_metrics.get(active_key, self.all_metrics["pos"])
 
                 # Draw minimal HUD on video frame
-                self._draw_overlay_badge(display_frame, est_bpm, sqi_val, has_face)
+                self._draw_overlay_badge(display_frame, est_bpm, sqi_val, has_face, method=current_method, method_bpms=method_bpms_now)
 
                 # Encode frame to JPEG
                 _, buffer = cv.imencode(".jpg", display_frame, [cv.IMWRITE_JPEG_QUALITY, 80])
@@ -343,18 +426,41 @@ class RPPGStreamManager:
             if face_processor:
                 face_processor.close()
 
-    def _draw_overlay_badge(self, frame: np.ndarray, bpm: Optional[float], sqi: int, has_face: bool):
-        """Draws subtle HUD information in the corner of the video frame."""
-        # Top banner background
-        cv.rectangle(frame, (10, 10), (220, 52), (15, 23, 42), -1)
-        cv.rectangle(frame, (10, 10), (220, 52), (51, 65, 85), 1)
+    def _draw_overlay_badge(
+        self,
+        frame: np.ndarray,
+        bpm: Optional[float],
+        sqi: int,
+        has_face: bool,
+        method: str = "pos",
+        method_bpms: Optional[Dict[str, Optional[float]]] = None
+    ):
+        """Draws clean HUD status overlay in the corner of the video frame."""
+        if method == "all" and has_face and method_bpms:
+            # Wide badge for multi-method display
+            cv.rectangle(frame, (10, 10), (320, 52), (15, 23, 42), -1)
+            cv.rectangle(frame, (10, 10), (320, 52), (51, 65, 85), 1)
+            cv.circle(frame, (25, 31), 6, (0, 230, 115), -1)
 
-        if has_face:
-            status_color = (0, 230, 115)  # neon green
-            status_str = f"BPM: {bpm:.1f}" if bpm else "BUFFERING..."
+            p_val = f"{method_bpms.get('pos'):.0f}" if method_bpms.get('pos') else "--"
+            c_val = f"{method_bpms.get('chrom'):.0f}" if method_bpms.get('chrom') else "--"
+            g_val = f"{method_bpms.get('green'):.0f}" if method_bpms.get('green') else "--"
+
+            txt = f"POS:{p_val}  CHM:{c_val}  GRN:{g_val}"
+            cv.putText(frame, txt, (40, 36), cv.FONT_HERSHEY_DUPLEX, 0.52, (255, 255, 255), 1, cv.LINE_AA)
         else:
-            status_color = (80, 80, 240)  # red/amber
-            status_str = "SEARCHING FACE"
+            # Single method badge
+            cv.rectangle(frame, (10, 10), (235, 52), (15, 23, 42), -1)
+            cv.rectangle(frame, (10, 10), (235, 52), (51, 65, 85), 1)
 
-        cv.circle(frame, (25, 31), 6, status_color, -1)
-        cv.putText(frame, status_str, (40, 37), cv.FONT_HERSHEY_DUPLEX, 0.60, (255, 255, 255), 1, cv.LINE_AA)
+            if has_face:
+                status_color = (0, 230, 115)  # neon green
+                m_label = method.upper() if method != "all" else "POS"
+                status_str = f"{m_label}: {bpm:.1f} BPM" if bpm else f"{m_label}: BUFFERING..."
+            else:
+                status_color = (80, 80, 240)  # red/amber
+                status_str = "SEARCHING FACE"
+
+            cv.circle(frame, (25, 31), 6, status_color, -1)
+            cv.putText(frame, status_str, (40, 37), cv.FONT_HERSHEY_DUPLEX, 0.58, (255, 255, 255), 1, cv.LINE_AA)
+

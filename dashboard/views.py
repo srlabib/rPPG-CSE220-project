@@ -175,13 +175,15 @@ def api_control(request):
 
     if action == "start_webcam":
         cam_idx = data.get("camera_index", 0)
-        stream_mgr.start_webcam(camera_index=cam_idx)
-        return JsonResponse({"status": "started_webcam"})
+        method = data.get("method", "pos")
+        stream_mgr.start_webcam(camera_index=cam_idx, method=method)
+        return JsonResponse({"status": "started_webcam", "method": stream_mgr.method})
 
     elif action == "start_video":
         video_path = data.get("video_path")
         gt_times = data.get("gt_times", [])
         gt_hr = data.get("gt_hr", [])
+        method = data.get("method", "pos")
 
         if not video_path:
             return JsonResponse({"error": "No video path specified."}, status=400)
@@ -194,8 +196,13 @@ def api_control(request):
             else:
                 return JsonResponse({"error": f"Video file not found: {video_path}"}, status=400)
 
-        stream_mgr.start_video(resolved_path, gt_times=gt_times, gt_hr=gt_hr)
-        return JsonResponse({"status": "started_video"})
+        stream_mgr.start_video(resolved_path, gt_times=gt_times, gt_hr=gt_hr, method=method)
+        return JsonResponse({"status": "started_video", "method": stream_mgr.method})
+
+    elif action == "set_method":
+        method = data.get("method", "pos")
+        stream_mgr.set_method(method)
+        return JsonResponse({"status": "method_set", "method": stream_mgr.method})
 
     elif action == "load_dataset":
         dataset_id = data.get("dataset_id")

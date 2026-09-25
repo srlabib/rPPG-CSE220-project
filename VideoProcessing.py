@@ -123,6 +123,13 @@ def parse_arguments() -> argparse.Namespace:
         help="Override frame rate (default: auto-detected or 30.0).",
     )
     parser.add_argument(
+        "-m", "--method",
+        type=str,
+        default="pos",
+        choices=["pos", "chrom", "green"],
+        help="rPPG extraction algorithm: pos, chrom, or green (default: pos).",
+    )
+    parser.add_argument(
         "--camera-settings",
         action="store_true",
         help="Open camera driver hardware settings dialog (Windows only).",
@@ -143,6 +150,7 @@ def run_rppg(
     fps_override: Optional[float] = None,
     show_camera_settings: bool = False,
     show_graph: bool = True,
+    method: str = "pos",
 ):
     """
     Main processing loop for rPPG tracking and visualization.
@@ -170,9 +178,10 @@ def run_rppg(
     print(f"[INFO] Initial frame rate estimate: {fps:.2f} FPS (Key wait: {delay} ms)")
     if is_camera and not fps_override:
         print("[INFO] Dynamic real-time FPS estimation enabled for webcam.")
+    print(f"[INFO] rPPG Algorithm: {method.upper()}")
     print("[INFO] Press 'q' or ESC in any display window to exit.")
 
-    pipeline = RPPGPipeline(fps=fps)
+    pipeline = RPPGPipeline(fps=fps, method=method)
     measured_fps = fps
     last_frame_time = time.perf_counter()
     face_lost_count = 0
@@ -270,6 +279,7 @@ def main():
             fps_override=args.fps,
             show_camera_settings=args.camera_settings,
             show_graph=not args.no_graph,
+            method=args.method,
         )
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted by user. Exiting cleanly.")

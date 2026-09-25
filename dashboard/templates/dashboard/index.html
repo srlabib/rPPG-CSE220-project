@@ -43,6 +43,38 @@
         </div>
     </header>
 
+    <!-- Algorithm Selection Toolbar -->
+    <div class="algo-bar">
+        <div class="algo-bar-inner">
+            <div class="algo-label">
+                <span class="algo-pulse-indicator"></span>
+                <span>rPPG Method:</span>
+            </div>
+            <div class="algo-btn-group" role="tablist">
+                <button type="button" class="algo-btn active" data-method="pos" id="btnMethodPos" title="Plane-Orthogonal-to-Skin (Wang et al., 2017)">
+                    <span class="algo-dot dot-pos"></span>
+                    <span class="algo-name">POS</span>
+                    <span class="algo-citation">Wang 2017</span>
+                </button>
+                <button type="button" class="algo-btn" data-method="chrom" id="btnMethodChrom" title="Chrominance-based rPPG (de Haan & Jeanne, 2013)">
+                    <span class="algo-dot dot-chrom"></span>
+                    <span class="algo-name">CHROM</span>
+                    <span class="algo-citation">de Haan 2013</span>
+                </button>
+                <button type="button" class="algo-btn" data-method="green" id="btnMethodGreen" title="Normalized Green Channel (Verkruysse et al., 2008)">
+                    <span class="algo-dot dot-green"></span>
+                    <span class="algo-name">GREEN</span>
+                    <span class="algo-citation">Verkruysse 2008</span>
+                </button>
+                <button type="button" class="algo-btn btn-compare-all" data-method="all" id="btnMethodAll" title="Run all 3 algorithms simultaneously against Ground Truth">
+                    <span class="algo-dot dot-all"></span>
+                    <span class="algo-name">⚡ Compare All</span>
+                    <span class="algo-citation">Benchmark Tri-Method</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Grid: Left Panel (Video & Pulse Oscilloscope) | Right Panel (Vitals, Graph, Metrics) -->
     <main class="dashboard-container">
         <!-- Left Column: Video Player & BVP Oscilloscope -->
@@ -50,6 +82,7 @@
             <section class="card">
                 <div class="card-header">
                     <h2 class="card-title"><span>📹</span> Live Video Stream & FaceMesh</h2>
+                    <span id="videoMethodBadge" class="algo-tag pos">POS</span>
                 </div>
 
                 <div class="video-viewport">
@@ -83,17 +116,20 @@
             <!-- Blood Volume Pulse (BVP Waveform) Oscilloscope -->
             <section class="card" style="margin-top: 1.25rem;">
                 <div class="card-header">
-                    <h3 class="card-title"><span>🌊</span> Blood Volume Pulse (BVP Waveform)</h3>
+                    <h3 class="card-title">
+                        <span>🌊</span> Blood Volume Pulse (BVP Waveform)
+                        <span id="oscMethodBadge" class="algo-tag pos" style="font-size: 0.68rem; margin-left: 6px;">POS</span>
+                    </h3>
                     <div style="display: flex; gap: 1rem; align-items: center;">
                         <div style="display: flex; gap: 0.85rem; font-size: 0.72rem; font-weight: 600;">
                             <span style="color: rgba(156, 163, 175, 0.7); display: flex; align-items: center; gap: 5px;">
-                                <span style="display: inline-block; width: 14px; height: 2px; background: rgba(156, 163, 175, 0.5); border-radius: 1px;"></span> Raw (Pre-Filter)
+                                <span style="display: inline-block; width: 14px; height: 2px; background: rgba(156, 163, 175, 0.5); border-radius: 1px;"></span> Raw
                             </span>
                             <span style="color: #10b981; display: flex; align-items: center; gap: 5px;">
-                                <span style="display: inline-block; width: 14px; height: 2px; background: #10b981; border-radius: 1px;"></span> Filtered (Butterworth)
+                                <span style="display: inline-block; width: 14px; height: 2px; background: #10b981; border-radius: 1px;"></span> Filtered
                             </span>
                         </div>
-                        <span style="font-size: 0.75rem; color: var(--text-muted);">60 FPS Oscilloscope</span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">60 FPS</span>
                     </div>
                 </div>
                 <div class="oscilloscope-container">
@@ -168,11 +204,11 @@
 
         <!-- Right Column: Vitals (Top) -> BPM vs Time Graph (Middle) -> Benchmark Metrics (Bottom) -->
         <div class="panel-right">
-            <!-- Vitals Hero (Heart Rate + SNR) on Top -->
-            <div class="hero-vitals-grid">
-                <div class="vital-card primary">
+            <!-- Vitals Hero: Single Method View -->
+            <div id="singleVitalsGrid" class="hero-vitals-grid">
+                <div class="vital-card primary" id="singleVitalCard">
                     <div class="vital-label">
-                        <span>Heart Rate (rPPG POS)</span>
+                        <span id="vitalMethodLabel">Heart Rate (rPPG POS)</span>
                         <span id="heartIcon" class="heart-icon">❤️</span>
                     </div>
                     <div class="vital-value-row">
@@ -193,16 +229,69 @@
                 </div>
             </div>
 
-            <!-- Heart Rate (BPM) vs. Time Graph Card in the middle (large, tall & sharp) -->
+            <!-- Vitals Hero: Compare All 3 Methods View (Visible in 'all' mode) -->
+            <div id="compareVitalsGrid" class="compare-vitals-grid" style="display: none;">
+                <div class="vital-card pos-card">
+                    <div class="vital-label">
+                        <span style="display: flex; align-items: center; gap: 6px;"><span class="algo-dot dot-pos"></span>POS</span>
+                        <span>❤️</span>
+                    </div>
+                    <div class="vital-value-row">
+                        <span id="posBpmValue" class="vital-value pos-val">--</span>
+                        <span class="vital-unit">BPM</span>
+                    </div>
+                </div>
+
+                <div class="vital-card chrom-card">
+                    <div class="vital-label">
+                        <span style="display: flex; align-items: center; gap: 6px;"><span class="algo-dot dot-chrom"></span>CHROM</span>
+                        <span>💚</span>
+                    </div>
+                    <div class="vital-value-row">
+                        <span id="chromBpmValue" class="vital-value chrom-val">--</span>
+                        <span class="vital-unit">BPM</span>
+                    </div>
+                </div>
+
+                <div class="vital-card green-card">
+                    <div class="vital-label">
+                        <span style="display: flex; align-items: center; gap: 6px;"><span class="algo-dot dot-green"></span>GREEN</span>
+                        <span>💜</span>
+                    </div>
+                    <div class="vital-value-row">
+                        <span id="greenBpmValue" class="vital-value green-val">--</span>
+                        <span class="vital-unit">BPM</span>
+                    </div>
+                </div>
+
+                <div class="vital-card sqi-card">
+                    <div class="vital-label">
+                        <span>Signal Quality</span>
+                        <span>📶</span>
+                    </div>
+                    <div class="vital-value-row">
+                        <span id="compareSqiValue" class="vital-value cyan-val">--</span>
+                        <span class="vital-unit">SNR</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heart Rate (BPM) vs. Time Graph Card in the middle -->
             <section class="card" style="margin-top: 1.25rem;">
-                <div class="card-header">
+                <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem;">
                     <h3 class="card-title"><span>📈</span> Heart Rate (BPM) vs. Time</h3>
-                    <div style="display: flex; gap: 1rem; font-size: 0.8rem; font-weight: 600;">
-                        <span id="gtLegendBadge" style="color: #38bdf8; display: none; align-items: center; gap: 6px;">
-                            <span style="display: inline-block; width: 14px; height: 2px; background: #38bdf8; border-radius: 1px;"></span> Ground Truth
+                    <div class="chart-legend-container" id="chartLegendContainer">
+                        <span id="gtLegendBadge" class="legend-badge gt" style="display: none;">
+                            <span class="legend-line line-gt"></span> Ground Truth
                         </span>
-                        <span style="color: #eb7a02; display: flex; align-items: center; gap: 6px;">
-                            <span style="display: inline-block; width: 14px; height: 2px; background: #eb7a02; border-radius: 1px;"></span> Predicted rPPG
+                        <span id="posLegendBadge" class="legend-badge pos">
+                            <span class="legend-line line-pos"></span> POS
+                        </span>
+                        <span id="chromLegendBadge" class="legend-badge chrom" style="display: none;">
+                            <span class="legend-line line-chrom"></span> CHROM
+                        </span>
+                        <span id="greenLegendBadge" class="legend-badge green" style="display: none;">
+                            <span class="legend-line line-green"></span> GREEN
                         </span>
                     </div>
                 </div>
@@ -211,11 +300,11 @@
                 </div>
             </section>
 
-            <!-- Ground Truth Live Performance Metrics below the Graph -->
-            <section class="card" style="margin-top: 1.25rem;">
+            <!-- Single Method Ground Truth Performance Metrics -->
+            <section id="singleMetricsContainer" class="card" style="margin-top: 1.25rem;">
                 <div class="card-header" style="margin-bottom: 0.5rem;">
                     <h3 class="card-title" style="font-size: 0.875rem; color: var(--text-secondary);">
-                        <span>⚖️</span> Live Ground-Truth Benchmark Metrics
+                        <span>⚖️</span> Live Ground-Truth Benchmark Metrics (<span id="metricsMethodLabel">POS</span>)
                     </h3>
                 </div>
 
@@ -243,7 +332,85 @@
                     <span id="metricPearson" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-cyan);">--</span>
                 </div>
                 <div style="margin-top: 0.4rem; text-align: right; font-size: 0.72rem; color: var(--text-muted);">
-                    * Cumulative metrics calculated after 15.0s stabilization window (matches evaluate.py)
+                    * Cumulative metrics calculated after 15.0s stabilization window
+                </div>
+            </section>
+
+            <!-- Compare All 3 Methods Benchmark Leaderboard (Visible in 'all' mode) -->
+            <section id="compareMetricsContainer" class="card" style="margin-top: 1.25rem; display: none;">
+                <div class="card-header" style="margin-bottom: 0.5rem;">
+                    <h3 class="card-title" style="font-size: 0.875rem; color: var(--text-secondary);">
+                        <span>🏆</span> Comparative Benchmark Leaderboard (POS vs CHROM vs GREEN)
+                    </h3>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                        Ref GT: <strong id="compareRefGtBpm" style="color: var(--accent-cyan);">--</strong>
+                    </div>
+                </div>
+
+                <div class="compare-table-wrapper">
+                    <table class="compare-table">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Live BPM</th>
+                                <th>Instant Error</th>
+                                <th>MAE (BPM)</th>
+                                <th>RMSE (BPM)</th>
+                                <th>Pearson <i>r</i></th>
+                                <th>Performance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr id="rowMetricPos">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="algo-dot dot-pos"></span>
+                                        <strong>POS</strong>
+                                        <span style="font-size: 0.7rem; color: var(--text-muted);">(Wang 2017)</span>
+                                    </div>
+                                </td>
+                                <td id="tblPosBpm" class="mono font-bold">--</td>
+                                <td id="tblPosError" class="mono">--</td>
+                                <td id="tblPosMae" class="mono font-bold">--</td>
+                                <td id="tblPosRmse" class="mono">--</td>
+                                <td id="tblPosPearson" class="mono">--</td>
+                                <td id="tblPosBadge"><span class="badge-status">Evaluating</span></td>
+                            </tr>
+                            <tr id="rowMetricChrom">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="algo-dot dot-chrom"></span>
+                                        <strong>CHROM</strong>
+                                        <span style="font-size: 0.7rem; color: var(--text-muted);">(de Haan 2013)</span>
+                                    </div>
+                                </td>
+                                <td id="tblChromBpm" class="mono font-bold">--</td>
+                                <td id="tblChromError" class="mono">--</td>
+                                <td id="tblChromMae" class="mono font-bold">--</td>
+                                <td id="tblChromRmse" class="mono">--</td>
+                                <td id="tblChromPearson" class="mono">--</td>
+                                <td id="tblChromBadge"><span class="badge-status">Evaluating</span></td>
+                            </tr>
+                            <tr id="rowMetricGreen">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="algo-dot dot-green"></span>
+                                        <strong>GREEN</strong>
+                                        <span style="font-size: 0.7rem; color: var(--text-muted);">(Verkruysse 2008)</span>
+                                    </div>
+                                </td>
+                                <td id="tblGreenBpm" class="mono font-bold">--</td>
+                                <td id="tblGreenError" class="mono">--</td>
+                                <td id="tblGreenMae" class="mono font-bold">--</td>
+                                <td id="tblGreenRmse" class="mono">--</td>
+                                <td id="tblGreenPearson" class="mono">--</td>
+                                <td id="tblGreenBadge"><span class="badge-status">Evaluating</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 0.4rem; text-align: right; font-size: 0.72rem; color: var(--text-muted);">
+                    * Evaluated after 15.0s stabilization window against synchronized Ground Truth
                 </div>
             </section>
         </div>

@@ -17,6 +17,9 @@ from config import (
 from signal_processing import (
     execute_pos_algorithm,
     execute_pos_algorithm_batch,
+    execute_chrom_algorithm_batch,
+    execute_green_algorithm_batch,
+    extract_pulse_batch,
     butter_bandpass_filter,
     calculate_bpm,
     calculate_snr,
@@ -27,18 +30,20 @@ from signal_processing import (
 
 class RPPGPipeline:
     """
-    Manages sliding RGB window buffer, applies the POS projection,
+    Manages sliding RGB window buffer, applies rPPG extraction (POS, CHROM, or GREEN),
     accumulates pulse wave points, filters noise, and computes heart rate (BPM).
     """
 
     def __init__(
         self,
         fps: float = DEFAULT_FPS,
+        method: str = "pos",
         window_time_sec: float = POS_WINDOW_TIME_SEC,
         pulse_buffer_max_len: int = PULSE_BUFFER_MAX_LEN,
         min_samples_for_bpm: int = MIN_SAMPLES_FOR_BPM
     ):
         self.fps = fps if fps > 0 else DEFAULT_FPS
+        self.method = (method or "pos").lower().strip()
         self.window_size = max(int(window_time_sec * self.fps), 10)
         self.pulse_buffer_max_len = pulse_buffer_max_len
         self.min_samples_for_bpm = min_samples_for_bpm
@@ -95,13 +100,13 @@ class RPPGPipeline:
         for i in range(NUM_PATCHES):
             self.patch_buffers[i].append(mean_rgbs[i])
 
-        # Compute POS when the sliding window is full
+        # Compute rPPG pulse when the sliding window is full
         if len(self.patch_buffers[0]) == self.window_size:
             # 1. Stack all patches: shape (12, window_size, 3) -> transpose to (12, 3, window_size)
             temporal_tensor = np.array(self.patch_buffers, dtype=np.float32).transpose(0, 2, 1)
 
-            # 2. Vectorized POS across all 12 patches simultaneously
-            candidate_pulses = execute_pos_algorithm_batch(temporal_tensor)
+            # 2. Vectorized rPPG pulse extraction across all 12 patches using active algorithm
+            candidate_pulses = extract_pulse_batch(temporal_tensor, method=self.method)
 
             # 3. Vectorized SNR across all 12 patches simultaneously
             candidate_snrs = calculate_snr_batch(candidate_pulses, self.fps)
@@ -146,6 +151,13 @@ class RPPGPipeline:
         else:
             return self.filtered_signal, None, True
 
+    def set_method(self, method: str):
+        """Switches active rPPG algorithm ('pos', 'chrom', or 'green') and resets state."""
+        new_m = (method or "pos").lower().strip()
+        if new_m != self.method:
+            self.method = new_m
+            self.reset()
+
     def reset(self):
         """Clears all internal buffers."""
         for buffer in self.patch_buffers:
@@ -157,3 +169,5 @@ class RPPGPipeline:
         self.current_bpm = 0.0
         self.filtered_signal = np.array([], dtype=np.float32)
         self.active_patch_indices = []
+
+
