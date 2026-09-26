@@ -173,43 +173,53 @@ def execute_chrom_algorithm_batch(
     return h_centered
 
 
-def execute_green_algorithm(
+def execute_omit_algorithm(
     temporal_matrix: np.ndarray,
     eps: float = POS_EPSILON
 ) -> np.ndarray:
     """
-    Executes the Green-channel rPPG algorithm on a sliding window of RGB data.
+    Executes the Orthogonal Matrix Image Transformation (OMIT) rPPG algorithm
+    on a sliding window of RGB data using QR decomposition.
 
     Reference:
-        Verkruysse, W., Svaasand, L. O., & Nelson, J. S. (2008).
-        Remote plethysmographic imaging using ambient light. Optics Express, 16(26), 21434-21445.
+        Álvarez Casado, C., & Bordallo López, M. (2023).
+        Face2PPG: An Unsupervised Pipeline for Blood Volume Pulse Extraction From Faces.
+        IEEE Journal of Biomedical and Health Informatics, 27(11), 5530-5541.
 
     Args:
         temporal_matrix: 2D array of shape (3, N) -> [R, G, B] over N frames.
-        eps: Small epsilon to prevent division by zero in dark frames.
+        eps: Small epsilon for numerical stability.
 
     Returns:
-        h_centered: 1D extracted pulse wave (length N), mean-centered for this window.
+        h_centered: 1D extracted pulse wave (length N), mean-centered.
     """
-    g = temporal_matrix[1, :]
+    # Transpose to (N, 3)
+    c = temporal_matrix.T
+    mean_c = np.mean(c, axis=0, keepdims=True) + eps
+    c_n = c / mean_c - 1.0
 
-    # 1. Temporal Normalization
-    g_n = g / (np.mean(g) + eps)
+    # Thin QR decomposition via Householder reflections
+    q, _ = np.linalg.qr(c_n)  # q is (N, 3)
 
-    # 2. Invert normalized green variation so systolic peak is positive
-    h = -g_n
+    # In OMIT, column 0 captures common luminance/motion noise,
+    # column 1 contains the orthogonal cardiac pulsatile component
+    pulse = q[:, 1]
 
-    # 3. Mean-centering
-    h_centered = h - np.mean(h)
-    return h_centered
+    # Align orientation with physiological systolic absorption (-Green)
+    g_n = c_n[:, 1]
+    if np.sum(pulse * (-g_n)) < 0:
+        pulse = -pulse
+
+    h_centered = pulse - np.mean(pulse)
+    return h_centered.astype(np.float32)
 
 
-def execute_green_algorithm_batch(
+def execute_omit_algorithm_batch(
     temporal_tensor: np.ndarray,
     eps: float = POS_EPSILON
 ) -> np.ndarray:
     """
-    Executes the Green-channel algorithm across multiple patches simultaneously.
+    Executes the OMIT algorithm across multiple patches simultaneously using vectorized QR decomposition.
 
     Args:
         temporal_tensor: 3D array of shape (K, 3, N) -> K patches, 3 channels (R,G,B), N frames.
@@ -218,6 +228,42 @@ def execute_green_algorithm_batch(
     Returns:
         h_centered: 2D array of shape (K, N) of extracted, mean-centered pulse signals.
     """
+    # Transpose (K, 3, N) -> (K, N, 3)
+    c = temporal_tensor.transpose(0, 2, 1)
+    mean_c = np.mean(c, axis=1, keepdims=True) + eps
+    c_n = c / mean_c - 1.0
+
+    # Vectorized batch QR decomposition across all K patches
+    q, _ = np.linalg.qr(c_n)  # q is (K, N, 3)
+    pulses = q[:, :, 1]       # shape (K, N)
+
+    # Vectorized systolic orientation alignment with -Green
+    g_n = c_n[:, :, 1]
+    cov = np.sum(pulses * (-g_n), axis=1, keepdims=True)
+    signs = np.where(cov < 0, -1.0, 1.0)
+    pulses = pulses * signs
+
+    h_centered = pulses - np.mean(pulses, axis=1, keepdims=True)
+    return h_centered.astype(np.float32)
+
+
+def execute_green_algorithm(
+    temporal_matrix: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """Legacy Green-channel algorithm (Verkruysse et al., 2008)."""
+    g = temporal_matrix[1, :]
+    g_n = g / (np.mean(g) + eps)
+    h = -g_n
+    h_centered = h - np.mean(h)
+    return h_centered
+
+
+def execute_green_algorithm_batch(
+    temporal_tensor: np.ndarray,
+    eps: float = POS_EPSILON
+) -> np.ndarray:
+    """Legacy Green-channel batch algorithm."""
     g = temporal_tensor[:, 1, :]
     g_n = g / (np.mean(g, axis=1, keepdims=True) + eps)
     h = -g_n
@@ -236,13 +282,16 @@ def extract_pulse_batch(
     Supported methods:
         - 'pos': Plane-Orthogonal-to-Skin (Wang et al., 2017)
         - 'chrom': Chrominance-based method (de Haan & Jeanne, 2013)
-        - 'green': Normalized Green Channel (Verkruysse et al., 2008)
+        - 'omit': Orthogonal Matrix Image Transformation (Álvarez Casado & Bordallo López, 2023)
+        - 'green': Legacy Normalized Green Channel (Verkruysse et al., 2008)
     """
     m = (method or "pos").lower().strip()
     if m == "chrom":
         return execute_chrom_algorithm_batch(temporal_tensor, eps=eps)
+    elif m == "omit":
+        return execute_omit_algorithm_batch(temporal_tensor, eps=eps)
     elif m == "green":
-        return execute_green_algorithm_batch(temporal_tensor, eps=eps)
+        return execute_omit_algorithm_batch(temporal_tensor, eps=eps)  # Redirect legacy green to omit
     else:  # default 'pos'
         return execute_pos_algorithm_batch(temporal_tensor, eps=eps)
 

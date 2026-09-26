@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let pulseBuffer = [];
     let rawPulseBuffer = [];
 
-    let currentMethod = "pos"; // "pos", "chrom", "green", or "all"
+    let currentMethod = "pos"; // "pos", "chrom", "omit", or "all"
 
     // Resize canvas properly for retina displays
     function resizeCanvas() {
@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 
-    // Chart.js: BPM vs Time (Supports GT, POS, CHROM, GREEN)
+    // Chart.js: BPM vs Time (Supports GT, POS, CHROM, OMIT)
     const chartCtx = document.getElementById("bpmChart").getContext("2d");
     const bpmChart = new Chart(chartCtx, {
         type: "line",
@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     hidden: true,
                 },
                 {
-                    label: "GREEN (Verkruysse et al., 2008)",
+                    label: "OMIT (Álvarez et al., 2023)",
                     data: [],
                     borderColor: "#a855f7", // Electric Violet
                     backgroundColor: "transparent",
@@ -135,9 +135,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Algorithm Switcher & Badges
     const btnMethodPos = document.getElementById("btnMethodPos");
     const btnMethodChrom = document.getElementById("btnMethodChrom");
-    const btnMethodGreen = document.getElementById("btnMethodGreen");
+    const btnMethodOmit = document.getElementById("btnMethodOmit") || document.getElementById("btnMethodGreen");
     const btnMethodAll = document.getElementById("btnMethodAll");
-    const algoButtons = [btnMethodPos, btnMethodChrom, btnMethodGreen, btnMethodAll].filter(Boolean);
+    const algoButtons = [btnMethodPos, btnMethodChrom, btnMethodOmit, btnMethodAll].filter(Boolean);
 
     const videoMethodBadge = document.getElementById("videoMethodBadge");
     const oscMethodBadge = document.getElementById("oscMethodBadge");
@@ -153,7 +153,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Compare All Vitals Elements
     const posBpmValue = document.getElementById("posBpmValue");
     const chromBpmValue = document.getElementById("chromBpmValue");
-    const greenBpmValue = document.getElementById("greenBpmValue");
+    const omitBpmValue = document.getElementById("omitBpmValue") || document.getElementById("greenBpmValue");
     const compareSqiValue = document.getElementById("compareSqiValue");
     const compareRefGtBpm = document.getElementById("compareRefGtBpm");
 
@@ -174,19 +174,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const tblChromBadge = document.getElementById("tblChromBadge");
     const rowMetricChrom = document.getElementById("rowMetricChrom");
 
-    const tblGreenBpm = document.getElementById("tblGreenBpm");
-    const tblGreenError = document.getElementById("tblGreenError");
-    const tblGreenMae = document.getElementById("tblGreenMae");
-    const tblGreenRmse = document.getElementById("tblGreenRmse");
-    const tblGreenPearson = document.getElementById("tblGreenPearson");
-    const tblGreenBadge = document.getElementById("tblGreenBadge");
-    const rowMetricGreen = document.getElementById("rowMetricGreen");
+    const tblOmitBpm = document.getElementById("tblOmitBpm") || document.getElementById("tblGreenBpm");
+    const tblOmitError = document.getElementById("tblOmitError") || document.getElementById("tblGreenError");
+    const tblOmitMae = document.getElementById("tblOmitMae") || document.getElementById("tblGreenMae");
+    const tblOmitRmse = document.getElementById("tblOmitRmse") || document.getElementById("tblGreenRmse");
+    const tblOmitPearson = document.getElementById("tblOmitPearson") || document.getElementById("tblGreenPearson");
+    const tblOmitBadge = document.getElementById("tblOmitBadge") || document.getElementById("tblGreenBadge");
+    const rowMetricOmit = document.getElementById("rowMetricOmit") || document.getElementById("rowMetricGreen");
 
     // Chart Legend Badges
     const gtLegendBadge = document.getElementById("gtLegendBadge");
     const posLegendBadge = document.getElementById("posLegendBadge");
     const chromLegendBadge = document.getElementById("chromLegendBadge");
-    const greenLegendBadge = document.getElementById("greenLegendBadge");
+    const omitLegendBadge = document.getElementById("omitLegendBadge") || document.getElementById("greenLegendBadge");
 
     // Benchmark Metric Elements (Single Mode)
     const metricGtBpm = document.getElementById("metricGtBpm");
@@ -225,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Show all 3 rPPG legend badges
             if (posLegendBadge) posLegendBadge.style.display = "flex";
             if (chromLegendBadge) chromLegendBadge.style.display = "flex";
-            if (greenLegendBadge) greenLegendBadge.style.display = "flex";
+            if (omitLegendBadge) omitLegendBadge.style.display = "flex";
 
             // Unhide all 3 rPPG curves
             bpmChart.data.datasets[1].hidden = false;
@@ -247,12 +247,12 @@ document.addEventListener("DOMContentLoaded", () => {
             // Show only the selected algorithm's legend badge
             if (posLegendBadge) posLegendBadge.style.display = (method === "pos") ? "flex" : "none";
             if (chromLegendBadge) chromLegendBadge.style.display = (method === "chrom") ? "flex" : "none";
-            if (greenLegendBadge) greenLegendBadge.style.display = (method === "green") ? "flex" : "none";
+            if (omitLegendBadge) omitLegendBadge.style.display = (method === "omit" || method === "green") ? "flex" : "none";
 
             // Only show the selected curve in the graph
             bpmChart.data.datasets[1].hidden = (method !== "pos");
             bpmChart.data.datasets[2].hidden = (method !== "chrom");
-            bpmChart.data.datasets[3].hidden = (method !== "green");
+            bpmChart.data.datasets[3].hidden = (method !== "omit" && method !== "green");
         }
 
         // Keep Ground Truth visible if present and in upload mode
@@ -292,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setupLegendToggle(gtLegendBadge, 0);
     setupLegendToggle(posLegendBadge, 1);
     setupLegendToggle(chromLegendBadge, 2);
-    setupLegendToggle(greenLegendBadge, 3);
+    setupLegendToggle(omitLegendBadge, 3);
 
     // Controls
     const btnStart = document.getElementById("btnStart");
@@ -344,6 +344,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const tabWebcam = document.getElementById("tabWebcam");
     const tabUpload = document.getElementById("tabUpload");
     const uploadPanel = document.getElementById("uploadPanel");
+    const webcamOptions = document.getElementById("webcamOptions");
+    const chkCameraSettings = document.getElementById("chkCameraSettings");
+    const btnCameraSettings = document.getElementById("btnCameraSettings");
+    const btnManualCameraSettings = document.getElementById("btnManualCameraSettings");
 
     // Upload elements
     const videoFileInput = document.getElementById("videoFileInput");
@@ -358,6 +362,31 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnLoadSelectedDataset = document.getElementById("btnLoadSelectedDataset");
     const btnRefreshDatasets = document.getElementById("btnRefreshDatasets");
 
+    // Helper to trigger camera settings
+    async function triggerCameraSettings() {
+        try {
+            const resp = await fetch("/api/control/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "open_camera_settings" })
+            });
+            const data = await resp.json();
+            if (!data.success && !isRunning && currentMode === "webcam") {
+                // If stream is not running yet, start webcam which automatically opens settings
+                btnStart.click();
+            }
+        } catch (err) {
+            console.error("Camera settings error:", err);
+        }
+    }
+
+    if (btnCameraSettings) {
+        btnCameraSettings.addEventListener("click", triggerCameraSettings);
+    }
+    if (btnManualCameraSettings) {
+        btnManualCameraSettings.addEventListener("click", triggerCameraSettings);
+    }
+
     // Mode Switching
     tabWebcam.addEventListener("click", () => {
         if (isRunning) stopStream();
@@ -365,6 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabWebcam.classList.add("active");
         tabUpload.classList.remove("active");
         uploadPanel.classList.remove("active");
+        if (webcamOptions) webcamOptions.style.display = "flex";
         updateFastForwardButtonVisibility();
         resetCharts();
         bpmChart.data.datasets[0].hidden = true; // hide GT in webcam mode
@@ -379,6 +409,7 @@ document.addEventListener("DOMContentLoaded", () => {
         tabUpload.classList.add("active");
         tabWebcam.classList.remove("active");
         uploadPanel.classList.add("active");
+        if (webcamOptions) webcamOptions.style.display = "none";
         updateFastForwardButtonVisibility();
         resetCharts();
         bpmChart.data.datasets[0].hidden = false;
@@ -584,21 +615,21 @@ document.addEventListener("DOMContentLoaded", () => {
         bpmValue.textContent = "--";
         if (posBpmValue) posBpmValue.textContent = "--";
         if (chromBpmValue) chromBpmValue.textContent = "--";
-        if (greenBpmValue) greenBpmValue.textContent = "--";
+        if (omitBpmValue) omitBpmValue.textContent = "--";
         if (compareRefGtBpm) compareRefGtBpm.textContent = "--";
         resetCompareTable();
         videoProgressBar.style.width = "0%";
     }
 
     function resetCompareTable() {
-        const rows = [rowMetricPos, rowMetricChrom, rowMetricGreen];
+        const rows = [rowMetricPos, rowMetricChrom, rowMetricOmit];
         rows.forEach(r => { if (r) r.classList.remove("highlight-best"); });
-        const badges = [tblPosBadge, tblChromBadge, tblGreenBadge];
+        const badges = [tblPosBadge, tblChromBadge, tblOmitBadge];
         badges.forEach(b => { if (b) b.innerHTML = '<span class="badge-status">Evaluating</span>'; });
         const cells = [
             tblPosBpm, tblPosError, tblPosMae, tblPosRmse, tblPosPearson,
             tblChromBpm, tblChromError, tblChromMae, tblChromRmse, tblChromPearson,
-            tblGreenBpm, tblGreenError, tblGreenMae, tblGreenRmse, tblGreenPearson
+            tblOmitBpm, tblOmitError, tblOmitMae, tblOmitRmse, tblOmitPearson
         ];
         cells.forEach(c => { if (c) c.textContent = "--"; });
     }
@@ -606,11 +637,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // Stream Controls
     btnStart.addEventListener("click", async () => {
         if (currentMode === "webcam") {
-            statusText.textContent = "Starting camera...";
+            const openSettings = chkCameraSettings ? chkCameraSettings.checked : true;
+            statusText.textContent = openSettings ? "Starting camera & settings dialog..." : "Starting camera...";
             const resp = await fetch("/api/control/", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "start_webcam", camera_index: 0, method: currentMethod })
+                body: JSON.stringify({
+                    action: "start_webcam",
+                    camera_index: 0,
+                    method: currentMethod,
+                    camera_settings: openSettings
+                })
             });
             if (resp.ok) {
                 startDisplay();
@@ -673,6 +710,11 @@ document.addEventListener("DOMContentLoaded", () => {
         btnPause.style.display = "inline-flex";
         btnStop.style.display = "inline-flex";
         btnPause.textContent = "⏸ Pause";
+        if (currentMode === "webcam") {
+            if (btnCameraSettings) btnCameraSettings.style.display = "inline-flex";
+        } else {
+            if (btnCameraSettings) btnCameraSettings.style.display = "none";
+        }
         updateFastForwardButtonVisibility();
         updateFastForwardUI(false);
 
@@ -711,6 +753,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btnStart.style.display = "inline-flex";
         btnPause.style.display = "none";
         btnStop.style.display = "none";
+        if (btnCameraSettings) btnCameraSettings.style.display = "none";
         updateFastForwardButtonVisibility();
         updateFastForwardUI(false);
 
@@ -732,16 +775,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function rankMethods(allM) {
         const list = [];
-        ["pos", "chrom", "green"].forEach(k => {
-            const m = allM[k];
+        ["pos", "chrom", "omit"].forEach(k => {
+            const m = allM[k] || (k === "omit" ? allM["green"] : null);
             if (m && m.mae !== null && m.mae > 0) {
                 list.push({ key: k, mae: m.mae });
             }
         });
 
         // Reset highlight and badge texts
-        [rowMetricPos, rowMetricChrom, rowMetricGreen].forEach(r => { if (r) r.classList.remove("highlight-best"); });
-        [tblPosBadge, tblChromBadge, tblGreenBadge].forEach(b => {
+        [rowMetricPos, rowMetricChrom, rowMetricOmit].forEach(r => { if (r) r.classList.remove("highlight-best"); });
+        [tblPosBadge, tblChromBadge, tblOmitBadge].forEach(b => {
             if (b) b.innerHTML = '<span class="badge-status">Evaluating</span>';
         });
 
@@ -749,8 +792,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         list.sort((a, b) => a.mae - b.mae);
 
-        const badgeEls = { pos: tblPosBadge, chrom: tblChromBadge, green: tblGreenBadge };
-        const rowEls = { pos: rowMetricPos, chrom: rowMetricChrom, green: rowMetricGreen };
+        const badgeEls = { pos: tblPosBadge, chrom: tblChromBadge, omit: tblOmitBadge };
+        const rowEls = { pos: rowMetricPos, chrom: rowMetricChrom, omit: rowMetricOmit };
 
         list.forEach((item, idx) => {
             const b = badgeEls[item.key];
@@ -787,7 +830,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const methodBpms = data.method_bpms || {};
             const posBpm = methodBpms.pos;
             const chromBpm = methodBpms.chrom;
-            const greenBpm = methodBpms.green;
+            const omitBpm = methodBpms.omit !== undefined ? methodBpms.omit : methodBpms.green;
 
             // Single Vitals Readout
             if (data.current_bpm) {
@@ -801,7 +844,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Compare All 3 Vitals Readouts
             if (posBpmValue) posBpmValue.textContent = posBpm ? posBpm.toFixed(1) : "--";
             if (chromBpmValue) chromBpmValue.textContent = chromBpm ? chromBpm.toFixed(1) : "--";
-            if (greenBpmValue) greenBpmValue.textContent = greenBpm ? greenBpm.toFixed(1) : "--";
+            if (omitBpmValue) omitBpmValue.textContent = omitBpm ? omitBpm.toFixed(1) : "--";
             if (compareSqiValue) compareSqiValue.textContent = `${data.sqi}%`;
 
             // SQI
@@ -845,12 +888,12 @@ document.addEventListener("DOMContentLoaded", () => {
                         bpmChart.data.datasets[2].data.push({ x: data.timestamp, y: chromBpm });
                         chartUpdated = true;
                     }
-                    if (greenBpm) {
-                        bpmChart.data.datasets[3].data.push({ x: data.timestamp, y: greenBpm });
+                    if (omitBpm) {
+                        bpmChart.data.datasets[3].data.push({ x: data.timestamp, y: omitBpm });
                         chartUpdated = true;
                     }
                 } else {
-                    const dsIdx = (currentMethod === "chrom") ? 2 : ((currentMethod === "green") ? 3 : 1);
+                    const dsIdx = (currentMethod === "chrom") ? 2 : ((currentMethod === "omit" || currentMethod === "green") ? 3 : 1);
                     if (data.current_bpm) {
                         bpmChart.data.datasets[dsIdx].data.push({ x: data.timestamp, y: data.current_bpm });
                         chartUpdated = true;
@@ -883,9 +926,10 @@ document.addEventListener("DOMContentLoaded", () => {
             // Comparative Leaderboard Table
             if (data.all_metrics) {
                 const allM = data.all_metrics;
+                const omitMetrics = allM.omit || allM.green;
                 updateCompareTableRow(allM.pos, posBpm, tblPosBpm, tblPosError, tblPosMae, tblPosRmse, tblPosPearson);
                 updateCompareTableRow(allM.chrom, chromBpm, tblChromBpm, tblChromError, tblChromMae, tblChromRmse, tblChromPearson);
-                updateCompareTableRow(allM.green, greenBpm, tblGreenBpm, tblGreenError, tblGreenMae, tblGreenRmse, tblGreenPearson);
+                updateCompareTableRow(omitMetrics, omitBpm, tblOmitBpm, tblOmitError, tblOmitMae, tblOmitRmse, tblOmitPearson);
                 rankMethods(allM);
             }
 
@@ -971,9 +1015,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Draw FILTERED pulse waveform with dynamic algorithm color & glow (on top)
-        const strokeColor = (currentMethod === "pos" || currentMethod === "all") ? "#eb7a02" : ((currentMethod === "green") ? "#c084fc" : "#10b981");
-        const glowColor = (currentMethod === "pos" || currentMethod === "all") ? "rgba(235, 122, 2, 0.6)" : ((currentMethod === "green") ? "rgba(192, 132, 252, 0.6)" : "rgba(16, 185, 129, 0.6)");
-        const gradColor = (currentMethod === "pos" || currentMethod === "all") ? "rgba(235, 122, 2, 0.12)" : ((currentMethod === "green") ? "rgba(168, 85, 247, 0.12)" : "rgba(16, 185, 129, 0.12)");
+        const isOmit = (currentMethod === "omit" || currentMethod === "green");
+        const strokeColor = (currentMethod === "pos" || currentMethod === "all") ? "#eb7a02" : (isOmit ? "#c084fc" : "#10b981");
+        const glowColor = (currentMethod === "pos" || currentMethod === "all") ? "rgba(235, 122, 2, 0.6)" : (isOmit ? "rgba(192, 132, 252, 0.6)" : "rgba(16, 185, 129, 0.6)");
+        const gradColor = (currentMethod === "pos" || currentMethod === "all") ? "rgba(235, 122, 2, 0.12)" : (isOmit ? "rgba(168, 85, 247, 0.12)" : "rgba(16, 185, 129, 0.12)");
 
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 2.2;

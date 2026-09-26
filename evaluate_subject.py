@@ -52,8 +52,8 @@ def parse_arguments() -> argparse.Namespace:
         "-m", "--method",
         type=str,
         default="pos",
-        choices=["pos", "chrom", "green"],
-        help="rPPG extraction algorithm: pos, chrom, or green (default: pos)."
+        choices=["pos", "chrom", "omit", "green"],
+        help="rPPG extraction algorithm: pos, chrom, or omit (default: pos)."
     )
     parser.add_argument(
         "--save-csv",
@@ -206,7 +206,8 @@ def run_evaluation(
     dataset_dir: str,
     headless: bool = True,
     skip_seconds: float = 15.0,
-    save_csv: bool = False
+    save_csv: bool = False,
+    method: str = "pos"
 ):
     video_path = os.path.join(dataset_dir, "vid.avi")
     gt_path = os.path.join(dataset_dir, "ground_truth.txt")
@@ -227,8 +228,8 @@ def run_evaluation(
     fps = detected_fps if detected_fps > 0 else DEFAULT_FPS
     total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
     print(f"[INFO] Video resolution: {int(cap.get(cv.CAP_PROP_FRAME_WIDTH))}x{int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))}")
-    print(f"[INFO] Using rPPG Algorithm: {args.method.upper()}")
-    pipeline = RPPGPipeline(fps=fps, method=args.method)
+    print(f"[INFO] Using rPPG Algorithm: {method.upper()}")
+    pipeline = RPPGPipeline(fps=fps, method=method)
 
     est_times = []
     est_hr = []
@@ -349,7 +350,8 @@ def main():
             dataset_dir=args.dataset,
             headless=not args.no_headless,
             skip_seconds=args.skip_seconds,
-            save_csv=args.save_csv
+            save_csv=args.save_csv,
+            method=args.method
         )
     except KeyboardInterrupt:
         print("\n[INFO] Evaluation cancelled by user.")

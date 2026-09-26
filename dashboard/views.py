@@ -176,8 +176,21 @@ def api_control(request):
     if action == "start_webcam":
         cam_idx = data.get("camera_index", 0)
         method = data.get("method", "pos")
-        stream_mgr.start_webcam(camera_index=cam_idx, method=method)
-        return JsonResponse({"status": "started_webcam", "method": stream_mgr.method})
+        show_camera_settings = data.get("camera_settings", True)
+        stream_mgr.start_webcam(
+            camera_index=cam_idx,
+            method=method,
+            show_camera_settings=show_camera_settings
+        )
+        return JsonResponse({
+            "status": "started_webcam",
+            "method": stream_mgr.method,
+            "camera_settings": show_camera_settings
+        })
+
+    elif action == "open_camera_settings":
+        ok = stream_mgr.open_camera_settings()
+        return JsonResponse({"status": "camera_settings_opened" if ok else "failed", "success": ok})
 
     elif action == "start_video":
         video_path = data.get("video_path")

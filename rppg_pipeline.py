@@ -18,6 +18,7 @@ from signal_processing import (
     execute_pos_algorithm,
     execute_pos_algorithm_batch,
     execute_chrom_algorithm_batch,
+    execute_omit_algorithm_batch,
     execute_green_algorithm_batch,
     extract_pulse_batch,
     butter_bandpass_filter,
@@ -30,7 +31,7 @@ from signal_processing import (
 
 class RPPGPipeline:
     """
-    Manages sliding RGB window buffer, applies rPPG extraction (POS, CHROM, or GREEN),
+    Manages sliding RGB window buffer, applies rPPG extraction (POS, CHROM, or OMIT),
     accumulates pulse wave points, filters noise, and computes heart rate (BPM).
     """
 
@@ -152,7 +153,7 @@ class RPPGPipeline:
             return self.filtered_signal, None, True
 
     def set_method(self, method: str):
-        """Switches active rPPG algorithm ('pos', 'chrom', or 'green') and resets state."""
+        """Switches active rPPG algorithm ('pos', 'chrom', or 'omit') and resets state."""
         new_m = (method or "pos").lower().strip()
         if new_m != self.method:
             self.method = new_m

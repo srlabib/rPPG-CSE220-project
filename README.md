@@ -52,7 +52,7 @@ Launch the modern medical dashboard interface with real-time video streaming, li
 python manage.py runserver
 ```
 Then navigate to **`http://localhost:8000`** in your browser.
-- **Webcam Mode**: Click "Start Stream" to monitor real-time pulse and BPM with face mesh tracking.
+- **Webcam Mode**: Click "Start Stream" to monitor real-time pulse and BPM with face mesh tracking. The camera driver hardware settings dialog automatically opens upon starting the camera (allowing manual exposure/white-balance adjustments on Windows). A dedicated "⚙️ Camera Settings" button is also available to re-adjust settings at any time during streaming.
 - **Video & Ground Truth Benchmark Mode**: Upload a video (e.g. `data/subject10/vid.avi`) and optional ground truth (`data/subject10/ground_truth.txt`). The ground truth curve pre-renders automatically, and real-time prediction tracks alongside it while reporting live **MAE**, **RMSE**, and **Pearson $r$**.
 
 ---

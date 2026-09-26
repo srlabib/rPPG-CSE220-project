@@ -77,7 +77,7 @@ def open_video_source(
     Returns:
         Configured cv.VideoCapture instance.
     """
-    is_camera = source.isdigit()
+    is_camera = str(source).isdigit()
     device_id = int(source) if is_camera else source
 
     if is_camera and sys.platform == "win32":
@@ -104,9 +104,10 @@ def open_video_source(
         cap.set(cv.CAP_PROP_FRAME_HEIGHT, actual_h)
         cap.set(cv.CAP_PROP_FPS, target_fps)
 
-        if show_camera_settings:
+        if show_camera_settings and sys.platform == "win32":
             # Force the Windows hardware settings menu to pop up for manual exposure control
-            cap.set(cv.CAP_PROP_SETTINGS, 1)
+            import threading
+            threading.Thread(target=lambda: cap.set(cv.CAP_PROP_SETTINGS, 1), daemon=True).start()
 
     return cap
 
@@ -148,8 +149,8 @@ def parse_arguments() -> argparse.Namespace:
         "-m", "--method",
         type=str,
         default="pos",
-        choices=["pos", "chrom", "green"],
-        help="rPPG extraction algorithm: pos, chrom, or green (default: pos).",
+        choices=["pos", "chrom", "omit", "green"],
+        help="rPPG extraction algorithm: pos, chrom, or omit (default: pos).",
     )
     parser.add_argument(
         "--camera-settings",

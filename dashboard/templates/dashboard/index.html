@@ -61,10 +61,10 @@
                     <span class="algo-name">CHROM</span>
                     <span class="algo-citation">de Haan 2013</span>
                 </button>
-                <button type="button" class="algo-btn" data-method="green" id="btnMethodGreen" title="Normalized Green Channel (Verkruysse et al., 2008)">
-                    <span class="algo-dot dot-green"></span>
-                    <span class="algo-name">GREEN</span>
-                    <span class="algo-citation">Verkruysse 2008</span>
+                <button type="button" class="algo-btn" data-method="omit" id="btnMethodOmit" title="Orthogonal Matrix Image Transformation (Álvarez et al., 2023)">
+                    <span class="algo-dot dot-omit"></span>
+                    <span class="algo-name">OMIT</span>
+                    <span class="algo-citation">Álvarez 2023</span>
                 </button>
                 <button type="button" class="algo-btn btn-compare-all" data-method="all" id="btnMethodAll" title="Run all 3 algorithms simultaneously against Ground Truth">
                     <span class="algo-dot dot-all"></span>
@@ -112,6 +112,20 @@
                     </button>
                     <button id="btnFastForward" class="btn btn-secondary btn-fastforward" style="display: none;" title="Toggle Fast Forward processing">
                         <span>⏩</span> Fast Forward
+                    </button>
+                    <button id="btnCameraSettings" class="btn btn-secondary" style="display: none;" title="Open camera driver hardware settings dialog (exposure, white balance)">
+                        <span>⚙️</span> Camera Settings
+                    </button>
+                </div>
+
+                <!-- Webcam Hardware Settings Option -->
+                <div id="webcamOptions" class="webcam-options" style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.75rem; padding: 0.55rem 0.85rem; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.8rem;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                        <input type="checkbox" id="chkCameraSettings" checked style="cursor: pointer; width: 15px; height: 15px; accent-color: var(--accent-cyan);" />
+                        <span>⚙️ Hardware Camera Settings (Auto-opens on stream start)</span>
+                    </label>
+                    <button type="button" id="btnManualCameraSettings" style="background: transparent; border: 1px solid var(--border-color); color: var(--accent-cyan); border-radius: var(--radius-sm); padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                        ⚙️ Adjust Driver
                     </button>
                 </div>
             </section>
@@ -256,13 +270,13 @@
                     </div>
                 </div>
 
-                <div class="vital-card green-card">
+                <div class="vital-card omit-card">
                     <div class="vital-label">
-                        <span style="display: flex; align-items: center; gap: 6px;"><span class="algo-dot dot-green"></span>GREEN</span>
+                        <span style="display: flex; align-items: center; gap: 6px;"><span class="algo-dot dot-omit"></span>OMIT</span>
                         <span>💜</span>
                     </div>
                     <div class="vital-value-row">
-                        <span id="greenBpmValue" class="vital-value green-val">--</span>
+                        <span id="omitBpmValue" class="vital-value omit-val">--</span>
                         <span class="vital-unit">BPM</span>
                     </div>
                 </div>
@@ -293,8 +307,8 @@
                         <span id="chromLegendBadge" class="legend-badge chrom" style="display: none;">
                             <span class="legend-line line-chrom"></span> CHROM
                         </span>
-                        <span id="greenLegendBadge" class="legend-badge green" style="display: none;">
-                            <span class="legend-line line-green"></span> GREEN
+                        <span id="omitLegendBadge" class="legend-badge omit" style="display: none;">
+                            <span class="legend-line line-omit"></span> OMIT
                         </span>
                     </div>
                 </div>
@@ -343,7 +357,7 @@
             <section id="compareMetricsContainer" class="card" style="margin-top: 1.25rem; display: none;">
                 <div class="card-header" style="margin-bottom: 0.5rem;">
                     <h3 class="card-title" style="font-size: 0.875rem; color: var(--text-secondary);">
-                        <span>🏆</span> Comparative Benchmark Leaderboard (POS vs CHROM vs GREEN)
+                        <span>🏆</span> Comparative Benchmark Leaderboard (POS vs CHROM vs OMIT)
                     </h3>
                     <div style="font-size: 0.75rem; color: var(--text-muted);">
                         Ref GT: <strong id="compareRefGtBpm" style="color: var(--accent-cyan);">--</strong>
@@ -394,20 +408,20 @@
                                 <td id="tblChromPearson" class="mono">--</td>
                                 <td id="tblChromBadge"><span class="badge-status">Evaluating</span></td>
                             </tr>
-                            <tr id="rowMetricGreen">
+                            <tr id="rowMetricOmit">
                                 <td>
                                     <div style="display: flex; align-items: center; gap: 6px;">
-                                        <span class="algo-dot dot-green"></span>
-                                        <strong>GREEN</strong>
-                                        <span style="font-size: 0.7rem; color: var(--text-muted);">(Verkruysse 2008)</span>
+                                        <span class="algo-dot dot-omit"></span>
+                                        <strong>OMIT</strong>
+                                        <span style="font-size: 0.7rem; color: var(--text-muted);">(Álvarez 2023)</span>
                                     </div>
                                 </td>
-                                <td id="tblGreenBpm" class="mono font-bold">--</td>
-                                <td id="tblGreenError" class="mono">--</td>
-                                <td id="tblGreenMae" class="mono font-bold">--</td>
-                                <td id="tblGreenRmse" class="mono">--</td>
-                                <td id="tblGreenPearson" class="mono">--</td>
-                                <td id="tblGreenBadge"><span class="badge-status">Evaluating</span></td>
+                                <td id="tblOmitBpm" class="mono font-bold">--</td>
+                                <td id="tblOmitError" class="mono">--</td>
+                                <td id="tblOmitMae" class="mono font-bold">--</td>
+                                <td id="tblOmitRmse" class="mono">--</td>
+                                <td id="tblOmitPearson" class="mono">--</td>
+                                <td id="tblOmitBadge"><span class="badge-status">Evaluating</span></td>
                             </tr>
                         </tbody>
                     </table>

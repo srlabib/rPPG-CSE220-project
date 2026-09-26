@@ -34,8 +34,10 @@ class RPPGStreamManager:
         self.is_running = False
         self.is_paused = False
         self.mode = "webcam"  # "webcam" or "upload"
-        self.method: str = "pos"  # "pos", "chrom", "green", or "all"
+        self.method: str = "pos"  # "pos", "chrom", "omit", or "all"
         self.source_path: Any = 0
+        self.show_camera_settings: bool = True
+        self.active_cap: Optional[cv.VideoCapture] = None
         self.gt_times: List[float] = []
         self.gt_hr: List[float] = []
 
@@ -47,14 +49,14 @@ class RPPGStreamManager:
 
         # Telemetry & Metrics state
         self.current_bpm: Optional[float] = None
-        self.method_bpms: Dict[str, Optional[float]] = {"pos": None, "chrom": None, "green": None}
+        self.method_bpms: Dict[str, Optional[float]] = {"pos": None, "chrom": None, "omit": None}
         self.latest_pulse: float = 0.0
         self.pulse_history: List[float] = []
         self.raw_pulse_history: List[float] = []
-        self.method_pulses: Dict[str, List[float]] = {"pos": [], "chrom": [], "green": []}
-        self.method_raw_pulses: Dict[str, List[float]] = {"pos": [], "chrom": [], "green": []}
+        self.method_pulses: Dict[str, List[float]] = {"pos": [], "chrom": [], "omit": []}
+        self.method_raw_pulses: Dict[str, List[float]] = {"pos": [], "chrom": [], "omit": []}
         self.pred_history: List[Tuple[float, float]] = []  # active method (timestamp, bpm)
-        self.pred_histories: Dict[str, List[Tuple[float, float]]] = {"pos": [], "chrom": [], "green": []}
+        self.pred_histories: Dict[str, List[Tuple[float, float]]] = {"pos": [], "chrom": [], "omit": []}
         self.current_timestamp: float = 0.0
         self.fps: float = 30.0
         self.sqi: int = 0
@@ -74,27 +76,30 @@ class RPPGStreamManager:
         self.all_metrics: Dict[str, Dict[str, Any]] = {
             "pos": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
             "chrom": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
-            "green": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+            "omit": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
         }
 
     def set_method(self, method: str):
-        """Switches the active evaluation / display method ('pos', 'chrom', 'green', or 'all')."""
+        """Switches the active evaluation / display method ('pos', 'chrom', 'omit', or 'all')."""
         with self.lock:
             m = (method or "pos").lower().strip()
-            if m in ["pos", "chrom", "green", "all"]:
+            if m == "green":
+                m = "omit"
+            if m in ["pos", "chrom", "omit", "all"]:
                 self.method = m
                 # Update current_bpm and live_metrics to reflect newly selected method
                 if m != "all" and m in self.method_bpms:
                     self.current_bpm = self.method_bpms[m]
                     self.live_metrics = self.all_metrics.get(m, self.live_metrics)
 
-    def start_webcam(self, camera_index: int = 0, method: str = "pos"):
+    def start_webcam(self, camera_index: int = 0, method: str = "pos", show_camera_settings: bool = True):
         """Starts real-time analysis using local webcam."""
         self.stop()
         with self.lock:
             self.mode = "webcam"
             self.method = (method or "pos").lower().strip()
             self.source_path = camera_index
+            self.show_camera_settings = bool(show_camera_settings)
             self.gt_times = []
             self.gt_hr = []
             self._reset_state()
@@ -103,6 +108,18 @@ class RPPGStreamManager:
 
         self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.worker_thread.start()
+
+    def open_camera_settings(self) -> bool:
+        """Opens camera driver settings dialog on the currently running capture."""
+        with self.lock:
+            active = self.active_cap
+            is_cam = (self.mode == "webcam")
+            running = self.is_running
+
+        if running and is_cam and active is not None and sys.platform == "win32":
+            threading.Thread(target=lambda: active.set(cv.CAP_PROP_SETTINGS, 1), daemon=True).start()
+            return True
+        return False
 
     def start_video(self, video_path: str, gt_times: Optional[List[float]] = None, gt_hr: Optional[List[float]] = None, method: str = "pos"):
         """Starts playback and evaluation of an uploaded video."""
@@ -136,14 +153,14 @@ class RPPGStreamManager:
 
     def _reset_state(self):
         self.current_bpm = None
-        self.method_bpms = {"pos": None, "chrom": None, "green": None}
+        self.method_bpms = {"pos": None, "chrom": None, "omit": None}
         self.latest_pulse = 0.0
         self.pulse_history = []
         self.raw_pulse_history = []
-        self.method_pulses = {"pos": [], "chrom": [], "green": []}
-        self.method_raw_pulses = {"pos": [], "chrom": [], "green": []}
+        self.method_pulses = {"pos": [], "chrom": [], "omit": []}
+        self.method_raw_pulses = {"pos": [], "chrom": [], "omit": []}
         self.pred_history = []
-        self.pred_histories = {"pos": [], "chrom": [], "green": []}
+        self.pred_histories = {"pos": [], "chrom": [], "omit": []}
         self.current_timestamp = 0.0
         self.sqi = 0
         self.face_detected = False
@@ -160,7 +177,7 @@ class RPPGStreamManager:
         self.all_metrics = {
             "pos": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
             "chrom": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
-            "green": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
+            "omit": {"current_error": None, "latest_gt": None, "mae": None, "rmse": None, "pearson_r": None, "count": 0},
         }
 
     def get_latest_jpeg(self) -> Optional[bytes]:
@@ -220,11 +237,17 @@ class RPPGStreamManager:
                 else:
                     cap = cv.VideoCapture(src)
 
+                cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
                 cap.set(cv.CAP_PROP_FRAME_WIDTH, DEFAULT_CAM_WIDTH)
                 cap.set(cv.CAP_PROP_FRAME_HEIGHT, DEFAULT_CAM_HEIGHT)
                 detected_fps = cap.get(cv.CAP_PROP_FPS)
                 target_fps = detected_fps if (detected_fps and 15.0 <= detected_fps <= 60.0) else DEFAULT_FPS
+                cap.set(cv.CAP_PROP_FPS, target_fps)
                 total_frames = 0
+
+                # Pop up Windows camera driver hardware settings dialog
+                if self.show_camera_settings and sys.platform == "win32":
+                    threading.Thread(target=lambda: cap.set(cv.CAP_PROP_SETTINGS, 1), daemon=True).start()
             else:
                 cap = cv.VideoCapture(self.source_path)
                 detected_fps = cap.get(cv.CAP_PROP_FPS)
@@ -237,13 +260,16 @@ class RPPGStreamManager:
                     self.is_running = False
                 return
 
+            with self.lock:
+                self.active_cap = cap
+
             self.fps = target_fps
             face_processor = FaceROIProcessor()
             # Initialize concurrent rPPG pipelines for all three algorithms
             pipelines = {
                 "pos": RPPGPipeline(fps=target_fps, method="pos"),
                 "chrom": RPPGPipeline(fps=target_fps, method="chrom"),
-                "green": RPPGPipeline(fps=target_fps, method="green"),
+                "omit": RPPGPipeline(fps=target_fps, method="omit"),
             }
 
             frame_interval = 1.0 / target_fps
@@ -296,9 +322,9 @@ class RPPGStreamManager:
 
                 results = {}
                 active_key = current_method if current_method in pipelines else "pos"
-                method_bvp_dict = {"pos": [], "chrom": [], "green": []}
-                method_raw_dict = {"pos": [], "chrom": [], "green": []}
-                method_bpms_now = {"pos": None, "chrom": None, "green": None}
+                method_bvp_dict = {"pos": [], "chrom": [], "omit": []}
+                method_raw_dict = {"pos": [], "chrom": [], "omit": []}
+                method_bpms_now = {"pos": None, "chrom": None, "omit": None}
                 est_bpm = None
                 pulse_val = 0.0
                 norm_bvp = []
@@ -373,7 +399,7 @@ class RPPGStreamManager:
                         self.video_progress = min(100.0, (frame_count / total_frames) * 100.0)
 
                     if has_face:
-                        for m in ["pos", "chrom", "green"]:
+                        for m in ["pos", "chrom", "omit"]:
                             if method_bpms_now[m] is not None:
                                 self.pred_histories[m].append((current_time_sec, method_bpms_now[m]))
 
@@ -382,8 +408,8 @@ class RPPGStreamManager:
                             if current_method == "all":
                                 p_str = f"P:{method_bpms_now['pos']:.1f}" if method_bpms_now['pos'] else "P:--"
                                 c_str = f"C:{method_bpms_now['chrom']:.1f}" if method_bpms_now['chrom'] else "C:--"
-                                g_str = f"G:{method_bpms_now['green']:.1f}" if method_bpms_now['green'] else "G:--"
-                                self.status_text = f"Tracking: {p_str} | {c_str} | {g_str} BPM"
+                                o_str = f"O:{method_bpms_now['omit']:.1f}" if method_bpms_now['omit'] else "O:--"
+                                self.status_text = f"Tracking: {p_str} | {c_str} | {o_str} BPM"
                             else:
                                 self.status_text = f"Tracking ({current_method.upper()}): {est_bpm:.1f} BPM"
                         else:
@@ -393,7 +419,7 @@ class RPPGStreamManager:
 
                     # Live metrics against ground truth for all methods
                     if self.gt_times and self.gt_hr:
-                        for m in ["pos", "chrom", "green"]:
+                        for m in ["pos", "chrom", "omit"]:
                             if len(self.pred_histories[m]) > 0:
                                 self.all_metrics[m] = compute_live_metrics(
                                     self.pred_histories[m],
@@ -425,6 +451,8 @@ class RPPGStreamManager:
                 self.status_text = f"Error: {str(e)}"
                 self.is_running = False
         finally:
+            with self.lock:
+                self.active_cap = None
             if cap:
                 cap.release()
             if face_processor:
@@ -448,9 +476,9 @@ class RPPGStreamManager:
 
             p_val = f"{method_bpms.get('pos'):.0f}" if method_bpms.get('pos') else "--"
             c_val = f"{method_bpms.get('chrom'):.0f}" if method_bpms.get('chrom') else "--"
-            g_val = f"{method_bpms.get('green'):.0f}" if method_bpms.get('green') else "--"
+            o_val = f"{method_bpms.get('omit'):.0f}" if method_bpms.get('omit') else "--"
 
-            txt = f"POS:{p_val}  CHM:{c_val}  GRN:{g_val}"
+            txt = f"POS:{p_val}  CHM:{c_val}  OMT:{o_val}"
             cv.putText(frame, txt, (40, 36), cv.FONT_HERSHEY_DUPLEX, 0.52, (255, 255, 255), 1, cv.LINE_AA)
         else:
             # Single method badge
